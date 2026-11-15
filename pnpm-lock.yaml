@@ -887,6 +887,9 @@ importers:
       '@helmgear/template':
         specifier: workspace:*
         version: link:../template
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
 
   packages/control/template:
     dependencies:

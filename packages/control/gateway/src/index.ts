@@ -1,2 +1,5 @@
 export { AuditLog, canonicalJson, payloadSha256 } from './audit.ts'
 export type { AuditEntry } from './audit.ts'
+export { Executor } from './execute.ts'
+export type { ExecutorOptions } from './execute.ts'
+export type { CallContext, CallResult, Connector, PendingRequest, ToolDef } from './registry.ts'
