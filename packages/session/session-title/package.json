@@ -1,0 +1,60 @@
+{
+  "name": "@helmgear/session-title",
+  "description": "Log-backed session title service and provider registry for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/session-projection": "workspace:*"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "name": "@helmgear/settings",
+  "description": "Abstract user-settings seam (ctx.settings) for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/hmr": "workspace:*",
+    "yaml": "^2.8.1"
+  },
+  "dependencies": {
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/config-editor": "workspace:*",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/cosmokit": "workspace:~",
+    "yaml": "^2.8.1"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "name": "@helmgear/tool-todo",
+  "description": "Model-facing todo_write tool over the Helmgear event-sourced session log",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/user-questions": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

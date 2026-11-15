@@ -1,0 +1,86 @@
+{
+  "name": "@helmgear/mcp-client",
+  "description": "MCP client bridge: connects to MCP servers and registers their tools on ctx.tools",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/error": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/subprocess": "workspace:*",
+    "@helmgear/timeout": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/mcp-resources": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/credentials": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/schemastery": "workspace:~",
+    "@modelcontextprotocol/client": "2.2.0",
+    "@helmgear/util-values": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/attachment-local": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/error": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/subprocess": "workspace:*",
+    "@helmgear/timeout": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@modelcontextprotocol/server-everything": "^2026.8.31",
+    "@modelcontextprotocol/server-filesystem": "^2026.8.31",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/http-proxy": "workspace:*",
+    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/node": "2.0.0",
+    "zod": "4.6.6",
+    "@helmgear/mcp-resources": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/credentials": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@helmgear/mcp-resources": {
+      "optional": true
+    },
+    "@helmgear/system-prompt": {
+      "optional": true
+    },
+    "@helmgear/credentials": {
+      "optional": true
+    }
+  }
+}

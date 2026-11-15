@@ -1,0 +1,32 @@
+Usage: helmgear [--profile] <name> [options] [app-args...]
+       helmgear plugin --profile <name> <pnpm-args...>
+
+helmgear: boot a Helmgear profile — an ordered stack of plugin-bundle patch
+layers under your own overrides.
+
+Arguments:
+  args                           arguments for the booted profile's app (see:
+                                 helmgear --profile <name> --help)
+
+Options:
+  -V, --version                  output the version number
+  --profile <name>               the profile under $HELMGEAR_HOME/profiles to boot
+  --from-default-profile <name>  replace a custom profile with a fresh copy of a
+                                 shipped profile template
+  --patch <path>                 extra patch-list overlay applied after the
+                                 profile layer (repeatable)
+  --dump-config                  print the composed profile tree and exit
+  --dump-config-schema           print JSON Schema for profile entries and
+                                 patches without mounting
+  --dump-default-config          print the profile tree without its user layer
+                                 or --patch overlays and exit
+
+Examples:
+  helmgear web                                   boot the web profile (same as: helmgear --profile web)
+  helmgear rescue --from-default-profile web
+                                            recreate rescue from the shipped web template, then boot it
+  helmgear headless "run the tests"              answer one task, print the result, and exit
+  helmgear tui --patch ./extra.yml               boot a custom profile with one extra overlay
+  helmgear tui --resume <session>                arguments after the launcher flags reach the app
+  helmgear web --help                            the web app's own flags and help
+  helmgear plugin --profile tui add <package>    install a plugin into the tui profile

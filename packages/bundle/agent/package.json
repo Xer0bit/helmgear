@@ -1,0 +1,69 @@
+{
+  "name": "@helmgear/agent-app",
+  "description": "The Helmgear agent profile bundle: JSON-RPC SDK, model routes, MCP tools, skills, and JSONL sessions, with no shell",
+  "version": "0.2.2-rc.3",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "helmgear": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/attachment-local": "workspace:*",
+    "@helmgear/compaction-basic": "workspace:*",
+    "@helmgear/compaction-image-offload": "workspace:*",
+    "@helmgear/fs-local": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/llm-deepseek-api-key": "workspace:*",
+    "@helmgear/llm-pi-ai": "workspace:*",
+    "@helmgear/llm-retry": "workspace:*",
+    "@helmgear/mcp-client": "workspace:*",
+    "@helmgear/mcp-resources": "workspace:*",
+    "@helmgear/sdk-app": "workspace:*",
+    "@helmgear/sdk-jsonrpc-server": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-checkpoint-policy": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/session-title": "workspace:*",
+    "@helmgear/skill": "workspace:*",
+    "@helmgear/skill-filesystem": "workspace:*",
+    "@helmgear/subprocess-local": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/token-meter": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-skill": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  },
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~"
+  }
+}

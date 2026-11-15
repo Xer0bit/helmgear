@@ -1,0 +1,59 @@
+{
+  // Client-side typecheck aggregate: packages/client tests and top-level Client benchmarks.
+  // Split from the host aggregate because both sides merge cordis Context
+  // under the same keys (sessions, loader) with different services; shared
+  // leaves (session/llm/tools/...) build once and are referenced by
+  // both programs through each client package's own references.
+  "extends": "./tsconfig.base.client.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    // Tests execute under vitest on node (e2e files spawn processes); browser
+    // purity of package src is each package's own tsconfig plus
+    // scripts/client-bundle-purity.spec.ts.
+    "types": ["node"]
+  },
+  "include": [
+    // The native/renderer keyboard fixture imports only these Cordis-free Desktop modules.
+    "apps/desktop/tests/**/*.client.spec.tsx",
+    // Source-subpath test imports can arrive through workspace links whose
+    // realpath semantics vary by host. Load package CSS declarations directly.
+    "packages/client/*/src/css-modules.d.ts",
+    "packages/experimental/*/src/css-modules.d.ts",
+    "packages/client/*/tests/**/*.ts",
+    "packages/client/*/tests/**/*.tsx",
+    "benchmarks/**/*.client.ts",
+    "benchmarks/**/*.client.tsx",
+    "benchmarks/support/**/*.ts",
+    "packages/*/*/tests/**/*.client.spec.ts",
+    "packages/*/*/tests/**/*.client.spec.tsx",
+    "packages/*/*/tests/**/*.client.tsx",
+    "packages/*/*/tests/**/*.client.ts",
+    // Client package outside packages/client with a local CSS module face.
+    "scripts/*.client.spec.ts",
+  ],
+  // Host unit tests (`*.host.spec.ts`), e2e tests (`*.host.e2e.ts`), and fixtures
+  // (`*.host.ts`) belong to the host aggregate, which excludes `*.client.*`
+  // in turn. `exclude` wins over `include`, so the test glob above stays broad.
+  "exclude": [
+    "packages/client/*/tests/**/*.host.spec.ts",
+    "packages/client/*/tests/**/*.host.e2e.ts",
+    "packages/client/*/tests/**/*.host.ts"
+  ],
+  "references": [
+    { "path": "./packages/util/atomic-write" },
+
+    // Producer-to-UI spill tests use the ptc-runtime contract with the real tool registry.
+    { "path": "./packages/ptc-runtime/ptc-runtime" },
+    { "path": "./packages/core/tool-executor-native" },
+    { "path": "./packages/core/tool-executor-ptc" },
+    // Shared leaf: web e2e boots the real host webserver (fixture + real-host
+    // smoke policy). webserver has zero workspace deps and no cordis merge,
+    // so it cannot drag host-side Context augmentation into this program.
+    // Compaction seam: ui-chat type-imports the canonical checkpoint contract
+    // from the cordis-free helmgear-compaction/checkpoint leaf. Composite rootDir
+    // rules make that path depend on this project reference.
+    { "path": "./packages/compaction/compaction" },
+    { "path": "./packages/test-support/tool-testkit" },
+  ]
+}

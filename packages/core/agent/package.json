@@ -1,0 +1,65 @@
+{
+  "name": "@helmgear/agent",
+  "description": "Agent interface, registry, initiator scope, and event vocabulary for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/workspace": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "peerDependenciesMeta": {
+    "@helmgear/workspace": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/workspace": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "zod": "4.6.6"
+  }
+}

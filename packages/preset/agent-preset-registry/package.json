@@ -1,0 +1,97 @@
+{
+  "name": "@helmgear/agent-preset-registry",
+  "description": "Declarative Agent preset registry and profile-backed editing",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./display": {
+      "types": "./lib/types/display.d.ts",
+      "default": "./lib/types/display.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/settings": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "dependencies": {
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/cordis-plugin-group": "workspace:~",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/atomic-write": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/settings": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-executor-ptc": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/fs-local": "workspace:*",
+    "@helmgear/hmr": "workspace:*",
+    "@helmgear/ptc-runtime": "workspace:*",
+    "@helmgear/sandbox": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  }
+}

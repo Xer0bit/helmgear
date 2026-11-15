@@ -1,0 +1,48 @@
+{
+  "name": "@helmgear/session-projection",
+  "description": "Session-projection seam: the merge-extensible projection type table, the provider contract, and the ctx.sessionProjections registry serving whole current values of log-derived per-session state",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@helmgear/session": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/loader-smoke": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

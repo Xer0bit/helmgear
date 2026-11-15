@@ -1,0 +1,80 @@
+{
+  "name": "@helmgear/tool-executor-ptc",
+  "description": "PTC program execution, tool bindings, and generated SDK prompts",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./run-code": {
+      "types": "./lib/types/run-code.d.ts",
+      "default": "./lib/run-code.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/run-code.js",
+    "lib/_chunks/*.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/ptc-runtime": "workspace:*",
+    "@helmgear/sandbox": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/ptc-runtime": "workspace:*",
+    "@helmgear/sandbox": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  }
+}

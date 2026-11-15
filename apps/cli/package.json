@@ -1,0 +1,102 @@
+{
+  "name": "@helmgear/helmgear",
+  "description": "helmgear CLI: profile launch, plugin management, and configuration inspection",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "helmgear": "lib/bin.js"
+  },
+  "files": [
+    "lib/*.js",
+    "lib/*.js.map",
+    "lib/types/*.d.ts",
+    "lib/types/*.d.ts.map",
+    "docs",
+    "src"
+  ],
+  "scripts": {
+    "prepack": "tsx ../../scripts/stage-helmgear-docs.ts",
+    "postpack": "tsx ../../scripts/stage-helmgear-docs.ts --clean"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/hmr": "workspace:*",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/cmdline": "workspace:*",
+    "@helmgear/compaction-basic": "workspace:*",
+    "@helmgear/compaction-tool-result-pruner": "workspace:*",
+    "@helmgear/fs-local": "workspace:*",
+    "@helmgear/goal": "workspace:*",
+    "@helmgear/home-paths": "workspace:*",
+    "@helmgear/launch-environment": "workspace:*",
+    "@helmgear/mcp-client": "workspace:*",
+    "@helmgear/official-bundles": "workspace:*",
+    "@helmgear/sdk-app": "workspace:*",
+    "@helmgear/agent-app": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/skill": "workspace:*",
+    "@helmgear/skill-filesystem": "workspace:*",
+    "@helmgear/token-meter": "workspace:*",
+    "@helmgear/tool-skill": "workspace:*",
+    "@helmgear/tool-todo": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "commander": "^15.0.0",
+    "js-yaml": "^4.3.2",
+    "node-addon-require-builtin": "^0.1.9",
+    "@helmgear/http-proxy": "workspace:*",
+    "@helmgear/mcp-resources": "workspace:*",
+    "@helmgear/atomic-write": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@agentclientprotocol/sdk": "1.4.0",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/attachment-local": "workspace:*",
+    "@helmgear/deepseek-llm-api-extensions": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/llm-deepseek": "workspace:*",
+    "@helmgear/llm-deepseek-api-key": "workspace:*",
+    "@helmgear/llm-mock-server": "workspace:*",
+    "@helmgear/llm-pi-ai": "workspace:*",
+    "@helmgear/llm-replay": "workspace:*",
+    "@helmgear/loader-smoke": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/sdk-client": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-checkpoint-policy": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/session-query": "workspace:*",
+    "@helmgear/settings": "workspace:*",
+    "@helmgear/subagent": "workspace:*",
+    "@helmgear/subprocess-local": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@types/js-yaml": "^4.0.9",
+    "@types/ws": "8.18.1",
+    "ajv": "^8.20.0",
+    "execa": "^10.0.1",
+    "ws": "8.21.3"
+  },
+  "exports": {
+    "./profile-boot": {
+      "types": "./lib/types/profile-boot.d.ts",
+      "default": "./lib/profile-boot.js"
+    },
+    "./lib/*": "./lib/*",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=24.9.0"
+  }
+}

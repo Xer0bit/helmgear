@@ -1,0 +1,57 @@
+{
+  "name": "@helmgear/hmr",
+  "description": "Coordinated module and profile configuration hot reload",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "author": "Shigma <shigma10826@gmail.com>",
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/cmdline": "workspace:*"
+  },
+  "dependencies": {
+    "@babel/code-frame": "^7.29.0",
+    "chokidar": "5.0.0",
+    "node-addon-require-builtin": "^0.1.9",
+    "picomatch": "^4.0.7",
+    "@helmgear/schemastery": "workspace:~"
+  },
+  "devDependencies": {
+    "@types/babel__code-frame": "^7.27.0",
+    "@types/picomatch": "^4.0.3",
+    "esbuild": "^0.28.2",
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/app-boot": "workspace:*",
+    "@helmgear/cmdline": "workspace:*",
+    "@helmgear/atomic-write": "workspace:*"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "name": "@helmgear/session",
+  "description": "Event-sourced session store for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./fork": {
+      "types": "./lib/types/fork.d.ts",
+      "default": "./lib/types/fork.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./surface": {
+      "types": "./lib/types/surface.d.ts",
+      "default": "./lib/types/surface.js"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "dependencies": {
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/util-values": "workspace:*"
+  }
+}

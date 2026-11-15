@@ -1,0 +1,131 @@
+{
+  "name": "@helmgear/subagent",
+  "description": "Abstract subagent seam (ctx.subagents): named-provider registry for delegating to child agents",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/chunked-list": "workspace:*",
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-preset-registry": "workspace:*",
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/sandbox": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/session-query": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/util-time": "workspace:*",
+    "@helmgear/permission-presets": "workspace:*",
+    "@helmgear/workspace": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@helmgear/agent-preset-registry": {
+      "optional": true
+    },
+    "@helmgear/permission-presets": {
+      "optional": true
+    },
+    "@helmgear/sandbox": {
+      "optional": true
+    },
+    "@helmgear/sandbox-policy": {
+      "optional": true
+    },
+    "@helmgear/session-persistence": {
+      "optional": true
+    },
+    "@helmgear/session-query": {
+      "optional": true
+    },
+    "@helmgear/workspace": {
+      "optional": true
+    },
+    "@helmgear/user-approval": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-preset-registry": "workspace:*",
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/error": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/sandbox": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/session-query": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/util-time": "workspace:*",
+    "@helmgear/permission-presets": "workspace:*",
+    "@helmgear/workspace": "workspace:*",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  }
+}

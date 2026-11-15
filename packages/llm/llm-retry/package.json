@@ -1,0 +1,66 @@
+{
+  "name": "@helmgear/llm-retry",
+  "description": "Provider-routed LLM request retry policy for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/timeout": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/session-projection": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/llm-deepseek": "workspace:*",
+    "@helmgear/llm-deepseek-api-key": "workspace:*",
+    "@helmgear/llm-mock-server": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/timeout": "workspace:*",
+    "@helmgear/tool-executor-native": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

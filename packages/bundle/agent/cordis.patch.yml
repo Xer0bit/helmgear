@@ -1,0 +1,122 @@
+# The Helmgear agent runtime: a complete standalone Cordis tree driven over the
+# JSON-RPC SDK. It gives the model no shell and no file-editing tools; an agent's
+# tools come from the MCP servers its template adds through a profile patch, and
+# its instructions from skills under <home>/skills or customSkillDirs.
+#
+# Nothing here sends session logs or package metadata to the model provider.
+
+- insert:
+    - id: sdk-app-startup
+      name: '@helmgear/sdk-app'
+      config:
+        profile: agent
+
+    - id: sdk-jsonrpc-server
+      name: '@helmgear/sdk-jsonrpc-server'
+      inject: [sdkAppStartup, loader]
+      config:
+        maxTokensAsSuccess: false
+
+    # Model routes. The DeepSeek route reads DEEPSEEK_API_KEY and, for another
+    # Messages-compatible host, DEEPSEEK_BASE_URL. Add OpenAI-compatible hosts by
+    # patching `llm-gateways.providers`.
+    - id: llm-deepseek
+      name: '@helmgear/llm-deepseek-api-key'
+      config:
+        apiKeyEnv: DEEPSEEK_API_KEY
+        streamIdleTimeoutMs: 600000
+
+    - id: llm-gateways
+      name: '@helmgear/llm-pi-ai'
+      config:
+        providers: {}
+
+    - id: llm-retry
+      name: '@helmgear/llm-retry'
+
+    - id: filesystem
+      name: '@helmgear/fs-local'
+
+    - id: attachment-local
+      name: '@helmgear/attachment-local'
+
+    - id: working-directory
+      name: '@helmgear/working-directory'
+
+    # MCP stdio servers are child processes.
+    - id: subprocess
+      name: '@helmgear/subprocess-local'
+
+    - id: session-projection
+      name: '@helmgear/session-projection'
+
+    - id: token-meter
+      name: '@helmgear/token-meter'
+
+    - id: compaction-basic
+      name: '@helmgear/compaction-basic'
+
+    - id: image-offload
+      name: '@helmgear/compaction-image-offload'
+
+    - id: timer
+      name: '@helmgear/cordis-plugin-timer'
+
+    - id: llm
+      name: '@helmgear/llm'
+
+    - id: session
+      name: '@helmgear/session'
+
+    - id: session-title
+      name: '@helmgear/session-title'
+      config:
+        fallbackMaxWords: 5
+        fallbackMaxBytes: 40
+        maxTitleBytes: 80
+
+    # A template overrides personaPrefix through its profile patch.
+    - id: system-prompt
+      name: '@helmgear/system-prompt'
+      config:
+        includeHarnessIdentity: false
+        includeRuntimeContext: false
+        personaPrefix: !!js process.env.HELMGEAR_SYSTEM_PROMPT ?? 'You are a capable assistant. Use the available tools to complete the task.'
+
+    - id: tools
+      name: '@helmgear/tools'
+
+    - id: tool-executor-native
+      name: '@helmgear/tool-executor-native'
+
+    - id: mcp-resources
+      name: '@helmgear/mcp-resources'
+
+    - id: skill
+      name: '@helmgear/skill'
+
+    - id: skill-filesystem
+      name: '@helmgear/skill-filesystem'
+      # Only skills the application passes in; never the host user's own skill folders.
+      config:
+        includeDefaultRoots: false
+
+    - id: tool-skill
+      name: '@helmgear/tool-skill'
+
+    - id: agent
+      name: '@helmgear/agent'
+
+    - id: agent-loop
+      name: '@helmgear/agent-loop'
+      config:
+        agents: []
+
+    - id: sessions
+      name: '@helmgear/session-persistence-jsonl'
+      config:
+        root: !!js helmgearHomePath('sessions')
+        compression: none
+
+    - id: session-checkpoint-policy
+      name: '@helmgear/session-checkpoint-policy'

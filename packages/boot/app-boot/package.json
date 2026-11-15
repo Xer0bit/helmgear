@@ -1,0 +1,63 @@
+{
+  "name": "@helmgear/app-boot",
+  "description": "Shared boot glue for the app bins: .env loading, fail-loud Loader guards, snapshot-aware config resolution, and the Loader boot sequence",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./worker/profile-resolution-bootstrap": {
+      "types": "./lib/types/profile-resolution/worker-bootstrap.d.ts",
+      "default": "./lib/worker/profile-resolution-bootstrap.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/worker/profile-resolution-bootstrap.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@helmgear/atomic-write": "workspace:*",
+    "@helmgear/official-bundles": "workspace:*",
+    "@helmgear/package-manifest": "workspace:*",
+    "@eslint-community/regexpp": "^4.12.2",
+    "ajv": "^8.20.0",
+    "node-addon-require-builtin": "^0.1.9",
+    "resolve.exports": "^2.0.3",
+    "semver": "^7.8.5",
+    "@helmgear/native-command": "workspace:*"
+  },
+  "peerDependencies": {
+    "@helmgear/cordis-plugin-group": "workspace:~",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/launch-environment": "workspace:*",
+    "@helmgear/home-paths": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "devDependencies": {
+    "@helmgear/schemastery": "workspace:~",
+    "@helmgear/cordis-plugin-group": "workspace:~",
+    "@helmgear/cordis-plugin-include": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/cordis-plugin-timer": "workspace:~",
+    "@helmgear/launch-environment": "workspace:*",
+    "@helmgear/home-paths": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@types/semver": "^7.8.0",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "name": "@helmgear/goal",
+  "description": "Event-sourced same-session goal state and lifecycle service for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/types/client.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/loader-smoke": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-checkpoint-policy": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/subprocess-local": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

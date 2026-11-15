@@ -1,0 +1,73 @@
+{
+  "name": "@helmgear/user-questions",
+  "description": "Abstract user-questions seam (ctx.userQuestions) for asking the human during agent runs",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/error": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/tool-executor-ptc": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "zod": "4.6.6",
+    "@helmgear/schemastery": "workspace:~"
+  }
+}

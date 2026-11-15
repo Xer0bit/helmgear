@@ -1,0 +1,42 @@
+{
+  "name": "@helmgear/sdk-protocol",
+  "description": "Shared wire protocol for the Helmgear SDK runtime: the newline-delimited JSON-RPC stdio transport and the named request, result, and notification types spoken between the runtime server and SDK clients",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/commands": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/subagent": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/user-questions": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/commands": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/subagent": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/user-questions": "workspace:*"
+  }
+}

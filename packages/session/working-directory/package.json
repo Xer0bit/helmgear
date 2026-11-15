@@ -1,0 +1,60 @@
+{
+  "name": "@helmgear/working-directory",
+  "description": "Session working directories with durable changes and model context",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/fs": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/error": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/fs": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/fs-local": "workspace:*",
+    "@helmgear/tool-testkit": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/error": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  }
+}

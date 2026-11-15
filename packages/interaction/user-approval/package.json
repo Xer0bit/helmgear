@@ -1,0 +1,57 @@
+{
+  "name": "@helmgear/user-approval",
+  "description": "User-approval seam (ctx.approval) for the Helmgear: one-shot permission decisions dispatched to composed answerers over the approval/request waterfall, fail-closed by default",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/session-projection": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/system-prompt": "workspace:*",
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/session-projection": "workspace:*"
+  }
+}

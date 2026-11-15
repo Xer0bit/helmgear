@@ -1,0 +1,76 @@
+{
+  "name": "@helmgear/sdk-jsonrpc-server",
+  "description": "Stdio JSON-RPC server plugin for out-of-process Helmgear SDK clients",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/schemastery": "workspace:~"
+  },
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/commands": "workspace:*",
+    "@helmgear/goal": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/llm-deepseek-api-key": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/sdk-protocol": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/subagent": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/user-questions": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/cordis-plugin-loader": "workspace:~",
+    "@helmgear/agent": "workspace:*",
+    "@helmgear/agent-loop": "workspace:*",
+    "@helmgear/agent-loop-testkit": "workspace:*",
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/commands": "workspace:*",
+    "@helmgear/compaction-basic": "workspace:*",
+    "@helmgear/goal": "workspace:*",
+    "@helmgear/llm": "workspace:*",
+    "@helmgear/llm-deepseek-api-key": "workspace:*",
+    "@helmgear/permission-presets": "workspace:*",
+    "@helmgear/sandbox-policy": "workspace:*",
+    "@helmgear/scope": "workspace:*",
+    "@helmgear/sdk-protocol": "workspace:*",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence-jsonl": "workspace:*",
+    "@helmgear/session-projection": "workspace:*",
+    "@helmgear/shell": "workspace:*",
+    "@helmgear/subagent": "workspace:*",
+    "@helmgear/token-meter": "workspace:*",
+    "@helmgear/tools": "workspace:*",
+    "@helmgear/user-approval": "workspace:*",
+    "@helmgear/user-questions": "workspace:*",
+    "@helmgear/working-directory": "workspace:*"
+  }
+}

@@ -1,0 +1,25 @@
+- name: '@helmgear/llm'
+- name: '@helmgear/session'
+- name: '@helmgear/session-projection'
+- name: '@helmgear/system-prompt'
+- name: '@helmgear/tools'
+- name: '@helmgear/tool-executor-native'
+- name: '@helmgear/agent'
+- name: '@helmgear/agent-loop'
+  config:
+    agents: []
+- name: '@helmgear/credentials-local'
+  config:
+    path: {{credentials}}
+    watch: false
+- name: '@helmgear/llm-deepseek-api-key'
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+    baseURL: {{endpoint}}
+    thinking: enabled
+    reasoningEffort: high
+    maxTokens: 256000
+    streamIdleTimeoutMs: 300000
+- name: '@helmgear/llm-deepseek-account'
+  config:
+    baseURL: {{endpoint}}

@@ -1,0 +1,74 @@
+{
+  "name": "@helmgear/llm",
+  "description": "Provider-neutral LLM service interface for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./message": {
+      "types": "./lib/types/message.d.ts",
+      "default": "./lib/types/message.js"
+    },
+    "./assistant-stream": {
+      "types": "./lib/types/assistant-stream.d.ts",
+      "default": "./lib/types/assistant-stream.js"
+    },
+    "./typert": {
+      "types": "./lib/typert.host.d.ts",
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "types": "./lib/typert.remote-client.d.ts",
+      "default": "./lib/typert.remote-client.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "lib/typert.host.js",
+    "lib/typert.host.d.ts",
+    "lib/typert.remote-client.js",
+    "lib/typert.remote-client.d.ts",
+    "lib/typert.remote-client.d.ts.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/error": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  },
+  "dependencies": {
+    "@helmgear/util-crypto": "workspace:*",
+    "@helmgear/schemastery": "workspace:~",
+    "zod": "4.6.6",
+    "@helmgear/timeout": "workspace:*",
+    "@helmgear/brand": "workspace:*",
+    "@helmgear/util-values": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@helmgear/attachment": "workspace:*",
+    "@helmgear/error": "workspace:*",
+    "@helmgear/package-manifest": "workspace:*",
+    "@helmgear/cordis": "workspace:~"
+  }
+}

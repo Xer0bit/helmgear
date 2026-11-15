@@ -1,0 +1,54 @@
+{
+  "name": "@helmgear/workspace",
+  "description": "Workspace entity registry (ctx.workspaceRegistry): durable workspace records with validated session attachment over the domain data form for the Helmgear",
+  "version": "0.2.2-rc.3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./types": {
+      "types": "./lib/types/types.d.ts",
+      "default": "./lib/types/types.js"
+    },
+    "./src/*": "./src/*",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "locale/*.json",
+    "lib/index.js",
+    "lib/types/**/*.js",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence": "workspace:*",
+    "@helmgear/storage": "workspace:*",
+    "@helmgear/storage-domain": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*"
+  },
+  "dependencies": {
+    "@helmgear/brand": "workspace:*",
+    "zod": "4.6.6"
+  },
+  "devDependencies": {
+    "@helmgear/cordis": "workspace:~",
+    "@helmgear/session": "workspace:*",
+    "@helmgear/session-persistence": "workspace:*",
+    "@helmgear/storage": "workspace:*",
+    "@helmgear/storage-domain": "workspace:*",
+    "@helmgear/typert-protocol": "workspace:*"
+  }
+}
