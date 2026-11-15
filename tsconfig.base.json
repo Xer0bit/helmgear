@@ -544,6 +544,7 @@
       "@helmgear/template": ["./packages/control/template/src"],
       "@helmgear/gateway": ["./packages/control/gateway/src"],
       "@helmgear/router": ["./packages/control/router/src"],
+      "@helmgear/runner": ["./packages/control/runner/src"],
       "@helmgear/sdk-minimal": ["./packages/bundle/sdk-minimal/src"],
       "@helmgear/session": ["./packages/core/session/src"],
       "@helmgear/session-checkpoint-policy": ["./packages/session/session-checkpoint-policy/src"],

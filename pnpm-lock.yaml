@@ -907,6 +907,25 @@ importers:
         specifier: workspace:*
         version: link:../template
 
+  packages/control/runner:
+    dependencies:
+      '@helmgear/gateway':
+        specifier: workspace:*
+        version: link:../gateway
+      '@helmgear/router':
+        specifier: workspace:*
+        version: link:../router
+      '@helmgear/sdk-client':
+        specifier: workspace:*
+        version: link:../../sdk/client
+      '@helmgear/template':
+        specifier: workspace:*
+        version: link:../template
+    devDependencies:
+      yaml:
+        specifier: ^2.4.2
+        version: 2.9.0
+
   packages/control/template:
     dependencies:
       yaml:
