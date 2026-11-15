@@ -901,6 +901,12 @@ importers:
         specifier: 2.2.0
         version: 2.2.0
 
+  packages/control/router:
+    dependencies:
+      '@helmgear/template':
+        specifier: workspace:*
+        version: link:../template
+
   packages/control/template:
     dependencies:
       yaml:

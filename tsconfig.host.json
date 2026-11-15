@@ -134,6 +134,7 @@
     { "path": "./packages/bundle/agent" },
     { "path": "./packages/control/template" },
     { "path": "./packages/control/gateway" },
+    { "path": "./packages/control/router" },
     { "path": "./packages/util/official-bundles" },
     { "path": "./packages/boot/app-boot" },
     { "path": "./packages/boot/cmdline" },
