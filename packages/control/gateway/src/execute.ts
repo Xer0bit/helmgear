@@ -68,8 +68,8 @@ export class Executor {
 
     let result: CallResult
     if (entry.def.tier === 'send') {
+      // The queue audits `pending` itself, before it stores the action.
       this.options.queue.enqueue({ actionId: key, tool, input, payloadSha256: hash, ctx })
-      this.options.audit.append({ ...record, event: 'pending' })
       result = { status: 'pending', actionId: key }
     } else {
       try {

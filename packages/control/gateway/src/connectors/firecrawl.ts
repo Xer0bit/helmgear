@@ -1,4 +1,5 @@
-import { isIP } from 'node:net'
+import { lookup as dnsLookup } from 'node:dns/promises'
+import { BlockList, isIP } from 'node:net'
 import type { Connector } from '../registry.ts'
 
 const MAX_MARKDOWN = 20_000
@@ -12,32 +13,52 @@ export interface FirecrawlOptions {
   fetch?: typeof fetch
   /** Hosts never scraped, with their subdomains. Default: LinkedIn, whose terms prohibit scraping. */
   blockedHosts?: string[]
+  /** Resolve a host name to its addresses. Default: the system resolver. */
+  lookup?: (host: string) => Promise<string[]>
 }
 
+const PRIVATE = new BlockList()
+for (const [net, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16]] as const) PRIVATE.addSubnet(net, bits, 'ipv4')
+for (const [net, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10]] as const) PRIVATE.addSubnet(net, bits, 'ipv6')
+
+function isPrivateAddress(address: string): boolean {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(address)
+  if (mapped) return PRIVATE.check(mapped[1]!, 'ipv4')
+  return isIP(address) === 6 ? PRIVATE.check(address, 'ipv6') : PRIVATE.check(address, 'ipv4')
+}
+
+const hostOf = (url: URL): string => url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '')
+const isBlocked = (host: string, blockedHosts: string[]): boolean => blockedHosts.some(blocked => host === blocked || host.endsWith(`.${blocked}`))
+
 /**
- * Why a URL may not be scraped, or undefined when it may. The URL comes from
- * the model, which may be repeating text from a web page, so it must not reach
- * services on this machine or network through the scraper.
- * ponytail: checks the name, not what it resolves to; a public name that points
- * at a private address still gets through. Resolve and re-check if that matters.
+ * Parse a URL the model chose and decide whether it may be scraped. The model
+ * may be repeating text from a web page, so the URL must not reach services
+ * on this machine or network through the scraper.
+ * ponytail: the name is resolved here and again by Firecrawl, and redirects are
+ * not followed here, so a host that changes its answer or redirects to a private
+ * address still gets through. Close that in Firecrawl's own network policy.
  */
-function refusal(raw: string, blockedHosts: string[]): string | undefined {
+async function checked(raw: string, blockedHosts: string[], lookup: (host: string) => Promise<string[]>): Promise<URL> {
+  const refuse = (reason: string): never => { throw new Error(`firecrawl.scrape: ${reason}`) }
   let url: URL
-  try { url = new URL(raw) } catch { return 'invalid URL' }
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'URL scheme not allowed'
-  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '')
-  if (blockedHosts.some(blocked => host === blocked || host.endsWith(`.${blocked}`))) return `host not allowed: ${host}`
+  try { url = new URL(raw) } catch { return refuse('invalid URL') }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') refuse('URL scheme not allowed')
+  const host = hostOf(url)
+  if (isBlocked(host, blockedHosts)) refuse(`host not allowed: ${host}`)
   // Any IP literal, and names that only resolve inside a private network.
   if (isIP(host) || host === 'localhost' || !host.includes('.') || /\.(?:localhost|local|internal|lan|home|corp)$/.test(host)) {
-    return `host not allowed: ${host}`
+    refuse(`host not allowed: ${host}`)
   }
-  return undefined
+  const addresses = await lookup(host).catch(() => refuse(`host not allowed: ${host} does not resolve`))
+  if (addresses.length === 0 || addresses.some(isPrivateAddress)) refuse(`host not allowed: ${host} resolves to a private address`)
+  return url
 }
 
 /** Web search and page reading through Firecrawl. Both tools return third-party content. */
 export function firecrawlConnector(options: FirecrawlOptions = {}): Connector {
   const baseUrl = (options.baseUrl ?? process.env.FIRECRAWL_URL ?? 'http://127.0.0.1:3002').replace(/\/+$/, '')
   const blockedHosts = (options.blockedHosts ?? ['linkedin.com', 'www.linkedin.com']).map(host => host.toLowerCase())
+  const lookup = options.lookup ?? (async (host: string) => (await dnsLookup(host, { all: true })).map(entry => entry.address))
 
   async function post(path: string, body: unknown): Promise<Record<string, unknown>> {
     const response = await (options.fetch ?? fetch)(`${baseUrl}${path}`, {
@@ -69,7 +90,10 @@ export function firecrawlConnector(options: FirecrawlOptions = {}): Connector {
         async run(input) {
           const data = await post('/v2/search', { query: input.query, limit: input.limit ?? 5 })
           const web = Array.isArray(data.web) ? data.web as Record<string, unknown>[] : []
-          return { results: web.map(({ url, title, description }) => ({ url, title, description })) }
+          const allowed = web.filter((result) => {
+            try { return !isBlocked(hostOf(new URL(String(result.url))), blockedHosts) } catch { return false }
+          })
+          return { results: allowed.map(({ url, title, description }) => ({ url, title, description })) }
         },
       },
       {
@@ -79,9 +103,8 @@ export function firecrawlConnector(options: FirecrawlOptions = {}): Connector {
         tier: 'read',
         untrusted: true,
         async run(input) {
-          const url = String(input.url)
-          const reason = refusal(url, blockedHosts)
-          if (reason) throw new Error(`firecrawl.scrape: ${reason}`)
+          // The parsed form is what gets sent, so the scraper sees the same host that was checked.
+          const url = (await checked(String(input.url), blockedHosts, lookup)).href
           const data = await post('/v2/scrape', { url, formats: ['markdown'] })
           const markdown = typeof data.markdown === 'string' ? data.markdown : ''
           return { url, markdown: markdown.slice(0, MAX_MARKDOWN), truncated: markdown.length > MAX_MARKDOWN }

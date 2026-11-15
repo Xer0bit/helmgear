@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
@@ -34,6 +34,7 @@ it('approve runs the stored payload once and audits approved then executed', asy
   expect(ran).toHaveLength(1)
   expect(ran[0]!.input).toEqual(INPUT)
   expect(audit.read()).toMatchObject([
+    { event: 'pending', actionId: 'a1', tier: 'send', tool: 'fake.send', payloadSha256: ACTION.payloadSha256, ...CTX },
     { event: 'approved', actionId: 'a1', approver: 'sam', tier: 'send', tool: 'fake.send', ...CTX },
     { event: 'executed', actionId: 'a1', approver: 'sam' },
   ])
@@ -49,13 +50,14 @@ it("approve refuses when the stored file's input no longer matches its recorded 
   writeFileSync(file, JSON.stringify(stored))
   expect(await queue.approve('a1', 'sam')).toMatchObject({ status: 'refused' })
   expect(ran).toHaveLength(0)
-  expect(audit.read()).toMatchObject([{ event: 'refused', actionId: 'a1', approver: 'sam' }])
+  expect(audit.read().slice(1)).toMatchObject([{ event: 'refused', actionId: 'a1', approver: 'sam' }])
+  // The refused action is still there to inspect or reject, not stranded.
+  expect(queue.list().map(a => a.actionId)).toEqual(['a1'])
 })
 
 it('approve refuses a stored file whose input and hash were both rewritten, using the audited hash', async () => {
-  const { queue, ran, audit, dir } = setup()
+  const { queue, ran, dir } = setup()
   queue.enqueue(ACTION)
-  audit.append({ ...CTX, tool: ACTION.tool, tier: 'send', event: 'pending', actionId: 'a1', payloadSha256: ACTION.payloadSha256 })
   const altered = { to: 'attacker@example.com', body: 'hello' }
   const file = join(dir, 'a1.json')
   writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), input: altered, payloadSha256: payloadSha256('fake.send', altered) }))
@@ -77,7 +79,7 @@ it('keeps the action approvable and audits failed when the run throws', async ()
   const { queue, audit } = setup(async () => { if (++attempts === 1) throw new Error('smtp down'); return 'ok' })
   queue.enqueue(ACTION)
   await expect(queue.approve('a1', 'sam')).rejects.toThrow('smtp down')
-  expect(audit.read().map(e => e.event)).toEqual(['approved', 'failed'])
+  expect(audit.read().map(e => e.event)).toEqual(['pending', 'approved', 'failed'])
   expect(queue.list()).toHaveLength(1)
   expect(await queue.approve('a1', 'sam')).toEqual({ status: 'executed', result: 'ok' })
 })
@@ -87,7 +89,7 @@ it('reject removes the action and audits rejected with the approver', () => {
   queue.enqueue(ACTION)
   queue.reject('a1', 'sam', 'wrong recipient')
   expect(queue.list()).toEqual([])
-  expect(audit.read()).toMatchObject([{ event: 'rejected', actionId: 'a1', approver: 'sam', detail: 'wrong recipient' }])
+  expect(audit.read().slice(1)).toMatchObject([{ event: 'rejected', actionId: 'a1', approver: 'sam', detail: 'wrong recipient' }])
   expect(ran).toHaveLength(0)
   expect(() => queue.reject('a1', 'sam')).toThrow(/a1/)
 })
@@ -124,4 +126,43 @@ it('createCore wires a send tool through the queue: pending, then approve runs i
   expect(sent).toEqual([INPUT])
   expect(core.audit.read().map(e => e.event)).toEqual(['pending', 'approved', 'executed'])
   expect(readdirSync(stateDir).sort()).toEqual(['audit.jsonl', 'pending', 'results'])
+})
+
+it('refuses a pending file that was never requested through the queue', async () => {
+  const { queue, ran, dir } = setup()
+  writeFileSync(join(dir, 'planted.json'), JSON.stringify({ ...ACTION, actionId: 'planted', createdAt: new Date().toISOString() }))
+  expect(await queue.approve('planted', 'sam')).toMatchObject({ status: 'refused' })
+  expect(ran).toHaveLength(0)
+})
+
+it('refuses when the stored tenant, session or template was altered', async () => {
+  for (const field of ['tenant', 'sessionId', 'template'] as const) {
+    const { queue, ran, dir } = setup()
+    queue.enqueue(ACTION)
+    const file = join(dir, 'a1.json')
+    const stored = JSON.parse(readFileSync(file, 'utf8'))
+    stored.ctx[field] = 'globex'
+    writeFileSync(file, JSON.stringify(stored))
+    expect(await queue.approve('a1', 'sam'), field).toMatchObject({ status: 'refused' })
+    expect(ran, field).toHaveLength(0)
+  }
+})
+
+it('still approves after a torn line in the audit log', async () => {
+  const { queue, ran, dir } = setup()
+  queue.enqueue(ACTION)
+  appendFileSync(join(dir, '..', 'audit.jsonl'), '{"at":"2026-01-01T00:00:00.000Z","ten')
+  expect(await queue.approve('a1', 'sam')).toMatchObject({ status: 'executed' })
+  expect(ran).toHaveLength(1)
+})
+
+it('an unreadable pending file is refused, not stranded, and does not break list', async () => {
+  const { queue, dir } = setup()
+  queue.enqueue(ACTION)
+  queue.enqueue({ ...ACTION, actionId: 'a2' })
+  writeFileSync(join(dir, 'a1.json'), '{ not json')
+  expect(queue.list().map(a => a.actionId)).toEqual(['a2'])
+  expect(await queue.approve('a1', 'sam')).toMatchObject({ status: 'refused' })
+  expect(existsSync(join(dir, 'a1.json'))).toBe(true)
+  expect(existsSync(join(dir, 'a1.json.running'))).toBe(false)
 })

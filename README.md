@@ -15,8 +15,8 @@ request ──> router (Jev) ──> template ──> agent (model loop, no shel
 ```
 
 - **Router.** A classifier scores the request against each template's description. If none fits, or the classifier fails, the answer is "no template". There is no default agent.
-- **Agent.** The model loop runs as a separate process with a scrubbed environment. It has no shell and no file tools; its only tools are the ones the gateway lists for its template.
-- **Gateway.** A local MCP server that owns every connector. Each tool has a risk tier: `read` and `draft` run at once, `send` is written to a queue and runs only after approval. Every decision is appended to an audit log that stores payload hashes, not payloads.
+- **Agent.** The model loop runs as a separate process with a scrubbed environment. It has no shell and no file tools; its only tools are the ones the gateway lists for its template. Each run gets its own gateway token, and the gateway decides from that token which tenant and connectors the process is, so the process cannot claim otherwise.
+- **Gateway.** A local MCP server that owns every connector. Each tool has a risk tier: `read` and `draft` run at once, `send` is written to a queue and runs only after approval. Every decision is appended to an audit log that stores payload hashes, not payloads. Tool results are cached under `results/` in the state folder so a retried call is not run twice; clear that folder on your own retention schedule.
 
 ## Run a task
 
@@ -35,13 +35,12 @@ import { createRunner } from '@helmgear/runner'
 const stateDir = './state'
 const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` })]
 const core = createCore({ connectors, stateDir })
-const token = crypto.randomUUID()
-const gateway = await startGateway({ executor: core.executor, connectors, token })
+const gateway = await startGateway({ executor: core.executor, connectors })
 
 const runner = createRunner({
   templatesDir: './templates',
   stateDir,
-  gateway: { url: gateway.url, token, approvals: core.approvals },
+  gateway: { ...gateway, approvals: core.approvals },
   classifier: jevClassifier({ apiKey: process.env.TYPESAFE_API_KEY! }),
   model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
 })
@@ -61,7 +60,7 @@ core.approvals.reject(actionId, 'sam', 'wrong recipient')
 core.audit.read()                                 // pending -> approved -> executed
 ```
 
-An approval is refused if the stored payload no longer matches the hash recorded when the agent asked for it.
+An approval is refused if the stored payload, tool, tenant or session no longer matches what the audit log recorded when the agent asked for it, or if the audit log has no such request. `runTask` gives up after `timeoutMs` (default five minutes); actions already queued stay queued.
 
 ## Templates
 
@@ -88,7 +87,7 @@ Four templates ship: `social-post`, `outreach-research`, `email-triage` and `boo
 
 | Connector | Tools | Notes |
 |---|---|---|
-| `firecrawl` | `search`, `scrape` (read) | Uses a self-hosted Firecrawl at `FIRECRAWL_URL` (default `http://127.0.0.1:3002`). Refuses LinkedIn and local or private addresses. |
+| `firecrawl` | `search`, `scrape` (read) | Uses a self-hosted Firecrawl at `FIRECRAWL_URL` (default `http://127.0.0.1:3002`). Refuses LinkedIn, and any host that is or resolves to a local or private address. It does not follow redirects, so restrict the Firecrawl container's own network access as well. |
 | `outbox` | `draft` (draft), `send` (send) | Writes JSON files. A stand-in for a real mail or publishing connector; nothing leaves the machine. |
 
 A connector is an object with a name and a list of tools (`name`, `description`, `inputSchema`, `tier`, `run`). Pass your own to `createCore` and `startGateway`.

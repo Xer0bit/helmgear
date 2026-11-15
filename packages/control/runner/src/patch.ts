@@ -6,9 +6,10 @@ import type { Template } from '@helmgear/template'
  * agent: its persona, its skills, and the gateway as its only source of tools.
  * A patch replaces a row's whole config, so the rows restate the fields the
  * agent profile sets. The gateway token is read from the environment by the
- * harness at boot; it is never part of this text.
+ * harness at boot; it is never part of this text. The token alone tells the
+ * gateway which tenant, session and connectors this process is.
  */
-export function templatePatch(template: Template, gateway: { url: string }, ctx: { tenant: string; sessionId: string }): string {
+export function templatePatch(template: Template, gateway: { url: string }): string {
   // A JSON string is a valid YAML double-quoted scalar, so every value is quoted that way.
   const q = (value: string): string => JSON.stringify(value)
   return `- id: system-prompt
@@ -33,9 +34,5 @@ export function templatePatch(template: Template, gateway: { url: string }, ctx:
         toolCallTimeoutMs: 60000
         headers:
           Authorization: !!js '\`Bearer \${process.env.HELMGEAR_GATEWAY_TOKEN}\`'
-          x-helmgear-tenant: ${q(ctx.tenant)}
-          x-helmgear-session: ${q(ctx.sessionId)}
-          x-helmgear-template: ${q(template.name)}
-          x-helmgear-connectors: ${q(template.connectors.join(','))}
 `
 }

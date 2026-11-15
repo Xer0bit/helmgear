@@ -16,13 +16,12 @@ it.skipIf(!process.env.DEEPSEEK_API_KEY)('a request becomes a pending send, and 
   const outbox = join(stateDir, 'outbox')
   const connectors = [firecrawlConnector(), outboxConnector({ dir: outbox })]
   const core = createCore({ connectors, stateDir })
-  const token = 'e2e-local-token'
-  const gateway = await startGateway({ executor: core.executor, connectors, token })
+  const gateway = await startGateway({ executor: core.executor, connectors })
   try {
     const runner = createRunner({
       templatesDir: fileURLToPath(new URL('../../../../templates', import.meta.url)),
       stateDir,
-      gateway: { url: gateway.url, token, approvals: core.approvals },
+      gateway: { ...gateway, approvals: core.approvals },
       classifier: always('social-post'),
       model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     })

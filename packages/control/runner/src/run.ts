@@ -17,7 +17,13 @@ export interface RunnerOptions {
   templatesDir: string
   /** `<stateDir>/tenants/<tenant>` is that tenant's harness home. */
   stateDir: string
-  gateway: { url: string; token: string; approvals: Pick<ApprovalQueue, 'list'> }
+  gateway: {
+    url: string
+    /** Mint a token the gateway ties to exactly this run; see `startGateway`. */
+    grant(ctx: { tenant: string; sessionId: string; template: string; connectors: string[] }): string
+    revoke(token: string): void
+    approvals: Pick<ApprovalQueue, 'list'>
+  }
   classifier: Classifier
   model: { provider: string; model: string }
   /**
@@ -26,6 +32,8 @@ export interface RunnerOptions {
    * process that reads untrusted content.
    */
   env?: NodeJS.ProcessEnv
+  /** Deadline for one whole run. Default 300,000 ms. */
+  timeoutMs?: number
   /** Test seam: build the harness client. */
   harnessFactory?: (options: HelmgearOptions) => HarnessLike
 }
@@ -82,23 +90,31 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
       const sessionId = `session-${randomUUID().replaceAll('-', '')}`
       mkdirSync(join(home, 'work'), { recursive: true })
       const patchFile = join(home, `${sessionId}.patch.yml`)
-      writeFileSync(patchFile, templatePatch(template, options.gateway, { tenant, sessionId }), { mode: 0o600 })
-
-      const base = options.env ?? Object.fromEntries(PASSED_ENV.flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
-      const harness = factory({
-        profile: 'agent',
-        patches: [patchFile],
-        helmgearHome: home,
-        cwd: join(home, 'work'),
-        provider: options.model.provider,
-        model: options.model.model,
-        reasoningEffort: template.reasoningEffort as NonNullable<HelmgearOptions['reasoningEffort']>,
-        env: { ...base, HELMGEAR_GATEWAY_TOKEN: options.gateway.token },
-      })
+      const token = options.gateway.grant({ tenant, sessionId, template: template.name, connectors: template.connectors })
       const pendingActionIds = (): string[] =>
         options.gateway.approvals.list(tenant).filter(action => action.ctx.sessionId === sessionId).map(action => action.actionId)
+      let harness: HarnessLike | undefined
+      let deadline: NodeJS.Timeout | undefined
       try {
-        const result = await harness.run(request, { sessionId })
+        writeFileSync(patchFile, templatePatch(template, options.gateway), { mode: 0o600 })
+        const base = options.env ?? Object.fromEntries(PASSED_ENV.flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+        harness = factory({
+          profile: 'agent',
+          patches: [patchFile],
+          helmgearHome: home,
+          cwd: join(home, 'work'),
+          provider: options.model.provider,
+          model: options.model.model,
+          reasoningEffort: template.reasoningEffort as NonNullable<HelmgearOptions['reasoningEffort']>,
+          env: { ...base, HELMGEAR_GATEWAY_TOKEN: token },
+        })
+        const timeoutMs = options.timeoutMs ?? 300_000
+        const result = await Promise.race([
+          harness.run(request, { sessionId }),
+          new Promise<never>((_resolve, reject) => {
+            deadline = setTimeout(() => reject(new RunnerError('HARNESS_TIMEOUT', `run exceeded ${timeoutMs} ms`)), timeoutMs)
+          }),
+        ])
         if (result.finishReason === 'error') {
           return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds() }
         }
@@ -108,7 +124,10 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
         if (error instanceof RequestTimeoutError) throw new RunnerError('HARNESS_TIMEOUT', error.message)
         throw error
       } finally {
-        await harness.close().catch(() => {})
+        clearTimeout(deadline)
+        // Closing ends the process, which is also what stops a run that hit its deadline.
+        await harness?.close().catch(() => {})
+        options.gateway.revoke(token)
         rmSync(patchFile, { force: true })
       }
     },

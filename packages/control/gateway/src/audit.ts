@@ -30,14 +30,18 @@ export class AuditLog {
   append(entry: Omit<AuditEntry, 'at'>): void {
     const fd = openSync(this.file, 'a', 0o600)
     try {
-      writeSync(fd, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`)
+      // `at` goes last so nothing in the entry can set the time.
+      writeSync(fd, `${JSON.stringify({ ...entry, at: new Date().toISOString() })}\n`)
       fsyncSync(fd)
     } finally { closeSync(fd) }
   }
 
   read(): AuditEntry[] {
     if (!existsSync(this.file)) return []
-    return readFileSync(this.file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as AuditEntry)
+    // A crash can leave one torn line; skip it instead of making the whole log unreadable.
+    return readFileSync(this.file, 'utf8').split('\n').flatMap((line) => {
+      try { return line ? [JSON.parse(line) as AuditEntry] : [] } catch { return [] }
+    })
   }
 }
 

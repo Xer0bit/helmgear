@@ -20,15 +20,22 @@ function templatesDir(): string {
 
 const always = (label: string): Classifier => ({ classify: async ({ options }) => ({ choices: options.map(o => ({ label: o.label, probability: o.label === label ? 0.95 : 0 })), noneFits: 0.05 }) })
 
+interface Grant { tenant: string; sessionId: string; template: string; connectors: string[]; revoked: boolean }
 interface Started { options: HelmgearOptions; patch: string; closed: boolean; ran: { request: string; sessionId: string }[] }
 
 function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; pending?: { actionId: string; ctx: { sessionId: string; tenant: string } }[] } = {}) {
   const started: Started[] = []
+  const grants: Grant[] = []
   const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-run-state-'))
   const { run, pending, ...rest } = overrides
   const runner = createRunner({
     templatesDir: templatesDir(), stateDir,
-    gateway: { url: 'http://127.0.0.1:4555/mcp', token: 'gw-token', approvals: { list: () => (pending ?? []) as never } },
+    gateway: {
+      url: 'http://127.0.0.1:4555/mcp',
+      grant: (ctx) => { grants.push({ ...ctx, revoked: false }); return `run-token-${grants.length}` },
+      revoke: (token) => { grants[Number(token.split('-')[2]) - 1]!.revoked = true },
+      approvals: { list: () => (pending ?? []) as never },
+    },
     classifier: always('social-post'),
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     harnessFactory(options) {
@@ -44,7 +51,7 @@ function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; p
     },
     ...rest,
   })
-  return { runner, started, stateDir }
+  return { runner, started, stateDir, grants }
 }
 
 const saved = { ...process.env }
@@ -60,8 +67,7 @@ it('routes, runs the template and returns the response with the session pending 
   const { options, patch, ran } = started[0]!
   expect(options).toMatchObject({ profile: 'agent', provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'low' })
   expect(ran).toEqual([{ request: 'draft a tweet', sessionId: (result as { sessionId: string }).sessionId }])
-  expect(patch).toContain(`x-helmgear-session: "${ran[0]!.sessionId}"`)
-  expect(patch).toContain('x-helmgear-tenant: "acme"')
+  expect(patch).not.toContain('x-helmgear')
 })
 
 it('returns the ids of actions this session left pending', async () => {
@@ -151,11 +157,29 @@ it('passes only the model key to the child environment by default', async () => 
   await runner.runTask({ tenant: 'acme', request: 'a' })
   const env = started[0]!.options.env!
   expect(env.DEEPSEEK_API_KEY).toBe('model-key')
-  expect(env.HELMGEAR_GATEWAY_TOKEN).toBe('gw-token')
+  expect(env.HELMGEAR_GATEWAY_TOKEN).toBe('run-token-1')
   expect(env.PATH).toBe(process.env.PATH)
   expect(env.FIRECRAWL_API_KEY).toBeUndefined()
   expect(env.TYPESAFE_API_KEY).toBeUndefined()
   const custom = setup({ env: { ONLY: 'this' } })
   await custom.runner.runTask({ tenant: 'acme', request: 'a' })
-  expect(custom.started[0]!.options.env).toEqual({ ONLY: 'this', HELMGEAR_GATEWAY_TOKEN: 'gw-token' })
+  expect(custom.started[0]!.options.env).toEqual({ ONLY: 'this', HELMGEAR_GATEWAY_TOKEN: 'run-token-1' })
+})
+
+it('grants the gateway token for exactly this run and revokes it afterwards, also after an error', async () => {
+  const ok = setup()
+  const result = await ok.runner.runTask({ tenant: 'acme', request: 'a' }) as { sessionId: string }
+  expect(ok.grants).toEqual([{ tenant: 'acme', sessionId: result.sessionId, template: 'social-post', connectors: ['outbox'], revoked: true }])
+  const broken = setup({ run: async () => { throw new Error('unexpected') } })
+  await expect(broken.runner.runTask({ tenant: 'acme', request: 'a' })).rejects.toThrow('unexpected')
+  expect(broken.grants.map(g => g.revoked)).toEqual([true])
+})
+
+it('rejects with RunnerError HARNESS_TIMEOUT when the run outlasts its deadline, and closes the harness', async () => {
+  const { runner, started, grants } = setup({ timeoutMs: 30, run: () => new Promise(() => {}) })
+  const error = await runner.runTask({ tenant: 'acme', request: 'a' }).catch((e: unknown) => e)
+  expect(error).toBeInstanceOf(RunnerError)
+  expect((error as RunnerError).code).toBe('HARNESS_TIMEOUT')
+  expect(started[0]!.closed).toBe(true)
+  expect(grants[0]!.revoked).toBe(true)
 })

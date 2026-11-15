@@ -67,7 +67,7 @@ it('does not run a send tool; returns pending', async () => {
   expect(await executor.call('fake.send', { q: 'go' }, CTX, 'k9')).toEqual({ status: 'pending', actionId: 'k9' })
   expect(calls).toHaveLength(0)
   expect(queued).toEqual([{ actionId: 'k9', tool: 'fake.send', input: { q: 'go' }, payloadSha256: payloadSha256('fake.send', { q: 'go' }), ctx: CTX }])
-  expect(audit.read()).toMatchObject([{ event: 'pending', tier: 'send', actionId: 'k9' }])
+  expect(audit.read()).toEqual([])
   // A retry of the same call does not queue a second action.
   expect(await executor.call('fake.send', { q: 'go' }, CTX, 'k9')).toEqual({ status: 'pending', actionId: 'k9' })
   expect(queued).toHaveLength(1)

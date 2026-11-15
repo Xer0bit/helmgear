@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
@@ -52,4 +52,15 @@ it('hashes a payload the same whatever the key order, and differently when a val
   expect(a).toMatch(/^[0-9a-f]{64}$/)
   expect(payloadSha256('outbox.send', { to: 'y', nested: { b: 1, a: [2, { d: 1, c: 2 }] } })).not.toBe(a)
   expect(payloadSha256('outbox.draft', { to: 'x', nested: { b: 1, a: [2, { d: 1, c: 2 }] } })).not.toBe(a)
+})
+
+it('stamps its own time even when the entry carries an `at` field, and skips a torn line when reading', () => {
+  const path = file()
+  const log = new AuditLog(path)
+  log.append({ ...ENTRY, at: '1999-01-01T00:00:00.000Z' } as never)
+  appendFileSync(path, '{"at":"2026-01-01T00:00:00.000Z","ten\n')
+  log.append({ ...ENTRY, actionId: 'a2' })
+  const entries = log.read()
+  expect(entries.map(e => e.actionId)).toEqual(['a1', 'a2'])
+  expect(entries[0]!.at.startsWith('1999')).toBe(false)
 })
