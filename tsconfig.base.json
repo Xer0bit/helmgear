@@ -542,6 +542,7 @@
       "@helmgear/sdk-app": ["./packages/bundle/sdk-app/src"],
       "@helmgear/agent-app": ["./packages/bundle/agent/src"],
       "@helmgear/template": ["./packages/control/template/src"],
+      "@helmgear/gateway": ["./packages/control/gateway/src"],
       "@helmgear/sdk-minimal": ["./packages/bundle/sdk-minimal/src"],
       "@helmgear/session": ["./packages/core/session/src"],
       "@helmgear/session-checkpoint-policy": ["./packages/session/session-checkpoint-policy/src"],

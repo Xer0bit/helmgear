@@ -882,6 +882,12 @@ importers:
         specifier: workspace:*
         version: link:../../llm/token-meter
 
+  packages/control/gateway:
+    dependencies:
+      '@helmgear/template':
+        specifier: workspace:*
+        version: link:../template
+
   packages/control/template:
     dependencies:
       yaml:
