@@ -20,7 +20,8 @@
     "helmgear": "node --import tsx/esm apps/cli/src/bin.ts",
     "typecheck": "tsc -b tsconfig.host.json",
     "test": "vitest run",
-    "build:native": "tsx native/system/scripts/build.ts --host-addon-only"
+    "build:native": "tsx native/system/scripts/build.ts --host-addon-only",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
   },
   "devDependencies": {
     "@helmgear/tool-executor-native": "workspace:*",

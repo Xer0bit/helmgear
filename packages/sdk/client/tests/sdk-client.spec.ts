@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@helmgear/brand'
 import type { ReasoningEffortId } from '@helmgear/llm'
 import {
-  DeepSeekHarness,
+  Helmgear,
   HarnessClient,
   HarnessSession,
   JsonRpcResponseError,
@@ -23,7 +23,7 @@ import {
   type HarnessNotification,
   type SdkPromptContentBlock,
 } from '../src/index.ts'
-import { createProcessDeepSeekHarness, finalResponse } from '../src/api.ts'
+import { createProcessHelmgear, finalResponse } from '../src/api.ts'
 import { createProcessHarnessClient, normalizeInput } from '../src/client.ts'
 import type { RuntimeProcessOptions } from '../src/launch.ts'
 
@@ -52,8 +52,8 @@ function processClient(options: RuntimeProcessOptions): HarnessClient {
   return createProcessHarnessClient(options)
 }
 
-function harnessWith(env: Record<string, string> = {}, extra: LaunchOverrides = {}): DeepSeekHarness {
-  const harness = createProcessDeepSeekHarness(fakeLaunch(env, extra))
+function harnessWith(env: Record<string, string> = {}, extra: LaunchOverrides = {}): Helmgear {
+  const harness = createProcessHelmgear(fakeLaunch(env, extra))
   cleanups.push(() => harness.close())
   return harness
 }
@@ -64,7 +64,7 @@ async function tempDir(prefix: string): Promise<string> {
   return dir
 }
 
-describe('DeepSeekHarness', () => {
+describe('Helmgear', () => {
   it('queues literal slash text and images through the low-level prompt method', async () => {
     const harness = harnessWith()
     await harness.start()
@@ -311,7 +311,7 @@ describe('DeepSeekHarness', () => {
   it('sends the configured cwd/provider/model/reasoningEffort/maxTokens in the handshake exactly once', async () => {
     const dir = await tempDir('sdk-client-init-')
     const recordFile = join(dir, 'init.jsonl')
-    const harness = createProcessDeepSeekHarness(fakeLaunch({ FAKE_RECORD_INIT: recordFile }), {
+    const harness = createProcessHelmgear(fakeLaunch({ FAKE_RECORD_INIT: recordFile }), {
       cwd: dir,
       provider: 'custom-provider',
       model: 'custom-model',
@@ -344,7 +344,7 @@ describe('DeepSeekHarness', () => {
     await mkdir(inner)
     const relativeCwd = relative(process.cwd(), inner)
     expect(isAbsolute(relativeCwd)).toBe(false)
-    const harness = createProcessDeepSeekHarness(
+    const harness = createProcessHelmgear(
       fakeLaunch({ FAKE_RECORD_INIT: recordFile, FAKE_ECHO_CWD_IN_INIT: '1' }, { cwd: relativeCwd }),
     )
     cleanups.push(() => harness.close())
@@ -379,7 +379,7 @@ describe('DeepSeekHarness', () => {
     const initialize = vi.spyOn(HarnessClient.prototype, 'initialize').mockRejectedValue(initializeError)
     const close = vi.spyOn(HarnessClient.prototype, 'close').mockRejectedValue(cleanupError)
     try {
-      const harness = createProcessDeepSeekHarness(fakeLaunch())
+      const harness = createProcessHelmgear(fakeLaunch())
       const failedClient = harness.client
       const failure = await harness.start().catch((error: unknown) => error)
       expect(failure).toBeInstanceOf(AggregateError)
@@ -400,7 +400,7 @@ describe('DeepSeekHarness', () => {
     const initialize = vi.spyOn(HarnessClient.prototype, 'initialize').mockReturnValue(initializeResult)
     const close = vi.spyOn(HarnessClient.prototype, 'close').mockResolvedValue()
     try {
-      const harness = createProcessDeepSeekHarness(fakeLaunch())
+      const harness = createProcessHelmgear(fakeLaunch())
       const original = harness.client
       const pending = harness.start()
       await harness.close()
@@ -436,9 +436,9 @@ describe('DeepSeekHarness', () => {
   })
 
   it('supports await using disposal', async () => {
-    let captured: DeepSeekHarness
+    let captured: Helmgear
     {
-      await using harness = createProcessDeepSeekHarness(fakeLaunch())
+      await using harness = createProcessHelmgear(fakeLaunch())
       captured = harness
       const result = await harness.run([{ type: 'text', text: 'scoped' }])
       expect(result.finalResponse).toBe('hello from fake runtime')
@@ -448,7 +448,7 @@ describe('DeepSeekHarness', () => {
   })
 
   it('constructs the public helmgear-backed client lazily', async () => {
-    const harness = new DeepSeekHarness()
+    const harness = new Helmgear()
     expect(harness.client).toBeInstanceOf(HarnessClient)
     await harness.close()
   })

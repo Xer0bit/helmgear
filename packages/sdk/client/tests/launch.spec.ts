@@ -39,14 +39,14 @@ describe('SDK helmgear launch resolution', () => {
     const launch = resolveHelmgearLaunch()
     expect(launch.command).toBe(process.execPath)
     expect(launch.args).toEqual(existsSync(bin)
-      ? [bin, '--profile', 'sdk']
+      ? [bin, '--profile', 'agent']
       : [
         '--import', import.meta.resolve('tsx/esm'), resolve(bin, '..', '..', 'src/bin.ts'),
-        '--profile', 'sdk',
+        '--profile', 'agent',
         '--patch', resolve(bin, '..', '..', 'src/sdk-source.cordis.patch.yml'),
       ])
     expect(launch.initializeTimeoutMs).toBe(DEFAULT_INITIALIZE_TIMEOUT_MS)
-    expect(launch.description).toBe('helmgear profile "sdk"')
+    expect(launch.description).toBe('helmgear profile "agent"')
   })
 
   it('makes every filesystem input absolute before spawn and preserves patch order', () => {

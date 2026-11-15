@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DeepSeekHarness } from '@helmgear/sdk-client'
+import { Helmgear } from '@helmgear/sdk-client'
 import { describe, expect, it, onTestFinished } from 'vitest'
 
 const helmgearBin = fileURLToPath(new URL('../../../lib/bin.js', import.meta.url))
@@ -51,7 +51,7 @@ describe.skipIf(!existsSync(helmgearBin))('sdk-minimal durability checkpoints', 
       { insert: [{ id: 'checkpoint-failure', name: fixture }] },
       ...disabled ? [{ id: 'session-checkpoint-policy', disabled: true }] : [],
     ]))
-    const harness = new DeepSeekHarness({
+    const harness = new Helmgear({
       helmgearBin, profile: 'sdk-minimal', helmgearHome: join(root, 'home'),
       cwd: root, processCwd: root, patches: [patch],
       env: { ...process.env, DEEPSEEK_API_KEY: 'keyless-checkpoint-test', DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}` },

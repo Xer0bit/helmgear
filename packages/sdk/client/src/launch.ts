@@ -129,7 +129,7 @@ export function resolveHelmgearLaunch(
   options: HarnessClientOptions = {},
   callerCwd: string = process.cwd(),
 ): RuntimeProcessOptions {
-  const profile = options.profile ?? 'sdk'
+  const profile = options.profile ?? 'agent'
   const helmgearLaunch = options.helmgearBin === undefined
     ? installedHelmgearNodeLaunch()
     : { nodeArgs: [resolve(callerCwd, options.helmgearBin)], patches: [], environment: {} }

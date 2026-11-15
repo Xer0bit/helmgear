@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { lastAssistantStreamChunk, type RetryPolicyConfig, type TokenUsage } from '@helmgear/llm'
-import { DeepSeekHarness } from '@helmgear/sdk-client'
+import { Helmgear } from '@helmgear/sdk-client'
 import type { SessionEvent } from '@helmgear/session'
 import { describe, expect, it, onTestFinished } from 'vitest'
 
@@ -89,7 +89,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('SDK native tool updates with rea
       { id: 'plugin-package-inventory-deepseek', disabled: true },
       { insert: [{ id: 'sdk-dynamic-tool-cache-fixture', name: fixturePath, config: { evidencePath, callsPath, sampleLabel, updatePrompt } }] },
     ]))
-    const harness = new DeepSeekHarness({
+    const harness = new Helmgear({
       helmgearBin, profile: 'sdk', patches: [patch], helmgearHome: join(root, 'home'),
       cwd: root, processCwd: root, provider: 'deepseek-official', model: 'deepseek-flash',
       env: { ...process.env, HELMGEAR_TELEMETRY_DISABLED: '1', HELMGEAR_PERMISSION_MODE: 'danger-full-access' },
