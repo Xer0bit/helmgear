@@ -1,7 +1,13 @@
 import type { RiskTier } from '@helmgear/template'
 
 /** Who is calling: set by the application through the gateway headers, never by the model. */
-export interface CallContext { tenant: string; sessionId: string; template: string }
+export interface CallContext {
+  tenant: string
+  sessionId: string
+  template: string
+  /** Connector names this template may use. Absent means every connector. */
+  connectors?: string[]
+}
 
 export interface ToolDef {
   /** `<connector>.<action>`, for example `outbox.send`. */

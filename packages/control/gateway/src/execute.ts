@@ -61,6 +61,7 @@ export class Executor {
       return { status: 'refused', reason }
     }
     if (!entry) return refuse(`unknown tool: ${tool}`)
+    if (ctx.connectors && !ctx.connectors.includes(tool.split('.')[0]!)) return refuse(`tool not available to this template: ${tool}`)
     if (!entry.validate(input)) {
       return refuse(`invalid input: ${(entry.validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')}`)
     }

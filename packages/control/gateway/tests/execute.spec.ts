@@ -85,3 +85,12 @@ it('rejects an idempotency key that is not a safe file name', async () => {
   const { executor } = setup()
   await expect(executor.call('fake.read', { q: 'hi' }, CTX, '../escape')).rejects.toThrow(/idempotency key/)
 })
+
+it('refuses a tool whose connector the template is not allowed to use', async () => {
+  const { executor, calls, audit } = setup()
+  const result = await executor.call('fake.read', { q: 'hi' }, { ...CTX, connectors: ['other'] }, 'k1')
+  expect(result).toEqual({ status: 'refused', reason: 'tool not available to this template: fake.read' })
+  expect(calls).toHaveLength(0)
+  expect(audit.read()).toMatchObject([{ event: 'refused', tool: 'fake.read' }])
+  expect(await executor.call('fake.read', { q: 'hi' }, { ...CTX, connectors: ['fake'] }, 'k2')).toMatchObject({ status: 'ok' })
+})
