@@ -21,7 +21,10 @@
     "typecheck": "tsc -b tsconfig.host.json",
     "test": "vitest run",
     "build:native": "tsx native/system/scripts/build.ts --host-addon-only",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "try": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx scripts/try.ts",
+    "outreach": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx examples/lead-outreach/outreach.ts",
+    "eval": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx evals/run.ts"
   },
   "devDependencies": {
     "@helmgear/tool-executor-native": "workspace:*",

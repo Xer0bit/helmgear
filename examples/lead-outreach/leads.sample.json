@@ -1,0 +1,8 @@
+{
+  "offer": "Helmgear, an agent harness that lets a small team run research, outreach and bookkeeping agents with human approval on every outgoing action",
+  "sender": "Sam at Helmgear",
+  "leads": [
+    { "company": "Basecamp", "website": "https://basecamp.com", "email": "hello@example.com" },
+    { "company": "Plausible Analytics", "website": "https://plausible.io", "email": "team@example.com" }
+  ]
+}
