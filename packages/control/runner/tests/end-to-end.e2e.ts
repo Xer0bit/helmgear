@@ -21,7 +21,7 @@ it.skipIf(!process.env.DEEPSEEK_API_KEY)('a request becomes a pending send, and 
     const runner = createRunner({
       templatesDir: fileURLToPath(new URL('../../../../templates', import.meta.url)),
       stateDir,
-      gateway: { ...gateway, approvals: core.approvals },
+      gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
       classifier: always('social-post'),
       model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     })

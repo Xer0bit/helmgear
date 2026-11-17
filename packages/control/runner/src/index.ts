@@ -1,3 +1,5 @@
 export { templatePatch } from './patch.ts'
 export { createRunner, RunnerError } from './run.ts'
-export type { HarnessLike, RunnerOptions, TaskResult } from './run.ts'
+export type { Checked, HarnessLike, RunnerOptions, TaskResult } from './run.ts'
+export { verifyReply } from './verify.ts'
+export type { ActionFact, Verification } from './verify.ts'

@@ -43,7 +43,7 @@ if (command === 'run') {
   const gateway = await startGateway({ executor: core.executor, connectors })
   const runner = createRunner({
     templatesDir: 'templates', stateDir,
-    gateway: { ...gateway, approvals: core.approvals },
+    gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
     // The template is named outright, so nothing is routed and no classifier is called.
     classifier: { classify: async () => { throw new Error('routing is not used here') } },
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },

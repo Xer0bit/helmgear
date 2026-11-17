@@ -20,7 +20,7 @@ const gateway = await startGateway({ executor: core.executor, connectors })
 try {
   const runner = createRunner({
     templatesDir: 'templates', stateDir,
-    gateway: { ...gateway, approvals: core.approvals },
+    gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
     classifier: jevClassifier({ apiKey: process.env.TYPESAFE_API_KEY ?? '' }),
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
   })

@@ -1,3 +1,5 @@
 export { jevClassifier } from './jev.ts'
+export { jevJudge } from './judge.ts'
+export type { Judge } from './judge.ts'
 export { route } from './route.ts'
 export type { Choice, Classifier, RouteResult } from './route.ts'

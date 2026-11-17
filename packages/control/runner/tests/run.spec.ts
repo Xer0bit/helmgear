@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Classifier } from '@helmgear/router'
+import type { Classifier, Judge } from '@helmgear/router'
 import { TransportClosedError, type HelmgearOptions } from '@helmgear/sdk-client'
 import { afterEach, expect, it } from 'vitest'
 import { createRunner, RunnerError, type HarnessLike, type RunnerOptions } from '../src/index.ts'
@@ -23,11 +23,12 @@ const always = (label: string): Classifier => ({ classify: async ({ options }) =
 interface Grant { tenant: string; sessionId: string; template: string; connectors: string[]; revoked: boolean }
 interface Started { options: HelmgearOptions; patch: string; closed: boolean; ran: { request: string; sessionId: string }[] }
 
-function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; pending?: { actionId: string; ctx: { sessionId: string; tenant: string } }[] } = {}) {
+type AuditFact = { sessionId: string; tool: string; event: string; actionId: string }
+function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; pending?: { actionId: string; ctx: { sessionId: string; tenant: string } }[]; audit?: AuditFact[] } = {}) {
   const started: Started[] = []
   const grants: Grant[] = []
   const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-run-state-'))
-  const { run, pending, ...rest } = overrides
+  const { run, pending, audit, ...rest } = overrides
   const runner = createRunner({
     templatesDir: templatesDir(), stateDir,
     gateway: {
@@ -35,6 +36,7 @@ function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; p
       grant: (ctx) => { grants.push({ ...ctx, revoked: false }); return `run-token-${grants.length}` },
       revoke: (token) => { grants[Number(token.split('-')[2]) - 1]!.revoked = true },
       approvals: { list: () => (pending ?? []) as never },
+      audit: { read: () => (audit ?? []) as never },
     },
     classifier: always('social-post'),
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
@@ -182,4 +184,93 @@ it('rejects with RunnerError HARNESS_TIMEOUT when the run outlasts its deadline,
   expect((error as RunnerError).code).toBe('HARNESS_TIMEOUT')
   expect(started[0]!.closed).toBe(true)
   expect(grants[0]!.revoked).toBe(true)
+})
+
+/** A judge whose answer to "claims a send" is read from the reply text itself. */
+const literalJudge: Judge = {
+  judge: async (state, statements) => {
+    const reply = (state as { reply: string }).reply
+    const answers: Record<string, number> = { claimsSent: /\b(sent|queued)\b/i.test(reply) ? 0.95 : 0.02, claimsDraft: 0.02, claimsDelivered: 0.02 }
+    return Object.fromEntries(Object.keys(statements).map(key => [key, answers[key] ?? 0.02]))
+  },
+}
+const reply = (sessionId: string, text: string) => ({ sessionId, finalResponse: text, finishReason: 'completed', events: [], notifications: [] })
+
+it('returns verified true and the session actions for a truthful reply', async () => {
+  const audit: AuditFact[] = [{ sessionId: 'someone-else', tool: 'outbox.send', event: 'pending', actionId: 'x' }]
+  const { runner, started } = setup({
+    audit, judge: literalJudge,
+    run: async (_request, { sessionId }) => {
+      audit.push({ sessionId, tool: 'firecrawl.search', event: 'executed', actionId: 'a1' }, { sessionId, tool: 'outbox.send', event: 'pending', actionId: 'a2' })
+      return reply(sessionId, 'Queued for approval.')
+    },
+  })
+  const result = await runner.runTask({ tenant: 'acme', request: 'send it' })
+  expect(result).toMatchObject({
+    status: 'done', verified: true, problems: [], response: 'Queued for approval.',
+    actions: [{ tool: 'firecrawl.search', event: 'executed', actionId: 'a1' }, { tool: 'outbox.send', event: 'pending', actionId: 'a2' }],
+  })
+  expect(started).toHaveLength(1)
+})
+
+it('runs one repair turn when the reply claims a send that was not made, and returns the repaired reply', async () => {
+  const audit: AuditFact[] = []
+  const turns: { request: string; sessionId: string }[] = []
+  const { runner } = setup({
+    audit, judge: literalJudge,
+    run: async (request, { sessionId }) => {
+      turns.push({ request, sessionId })
+      if (turns.length === 1) return reply(sessionId, 'I sent the message.')
+      audit.push({ sessionId, tool: 'outbox.send', event: 'pending', actionId: 'a1' })
+      return reply(sessionId, 'Now queued for approval.')
+    },
+  })
+  const result = await runner.runTask({ tenant: 'acme', request: 'send it' })
+  expect(result).toMatchObject({ status: 'done', verified: true, problems: [], response: 'Now queued for approval.' })
+  expect(turns).toHaveLength(2)
+  expect(turns[1]!.sessionId).toBe(turns[0]!.sessionId)
+  expect(turns[1]!.request).toMatch(/does not match what you did/)
+})
+
+it('returns verified false with problems when the repair turn does not fix it, and repairs only once', async () => {
+  let turns = 0
+  const { runner } = setup({ judge: literalJudge, run: async (_request, { sessionId }) => { turns++; return reply(sessionId, 'I sent the message.') } })
+  const result = await runner.runTask({ tenant: 'acme', request: 'send it' }) as { verified: boolean; problems: string[] }
+  expect(result.verified).toBe(false)
+  expect(result.problems.length).toBeGreaterThan(0)
+  expect(turns).toBe(2)
+})
+
+it('does not repair when repair is off', async () => {
+  let turns = 0
+  const { runner } = setup({ judge: literalJudge, repair: false, run: async (_request, { sessionId }) => { turns++; return reply(sessionId, 'I sent the message.') } })
+  expect(await runner.runTask({ tenant: 'acme', request: 'send it' })).toMatchObject({ status: 'done', verified: false })
+  expect(turns).toBe(1)
+})
+
+it('returns verified false and does not repair when no judge is configured', async () => {
+  let turns = 0
+  const { runner } = setup({ run: async (_request, { sessionId }) => { turns++; return reply(sessionId, 'I sent the message.') } })
+  expect(await runner.runTask({ tenant: 'acme', request: 'send it' })).toMatchObject({ status: 'done', verified: false, problems: ['not verified: no judge configured'], actions: [] })
+  expect(turns).toBe(1)
+})
+
+it('tells the agent not to call a tool again when the action exists and only the wording is wrong', async () => {
+  const audit: AuditFact[] = []
+  const prompts: string[] = []
+  const delivered: Judge = { judge: async (state, statements) => {
+    const text = (state as { reply: string }).reply
+    return Object.fromEntries(Object.keys(statements).map(key => [key, (key === 'claimsDelivered' && /delivered/.test(text)) || key === 'claimsSent' ? 0.95 : 0.02]))
+  } }
+  const { runner } = setup({
+    audit, judge: delivered,
+    run: async (request, { sessionId }) => {
+      prompts.push(request)
+      if (prompts.length === 1) { audit.push({ sessionId, tool: 'outbox.send', event: 'pending', actionId: 'a1' }); return reply(sessionId, 'Your email was delivered.') }
+      return reply(sessionId, 'Your email is queued for approval.')
+    },
+  })
+  expect(await runner.runTask({ tenant: 'acme', request: 'send it' })).toMatchObject({ verified: true, response: 'Your email is queued for approval.' })
+  expect(prompts[1]).toMatch(/Do not call any tool/)
+  expect(prompts[1]).not.toMatch(/make the tool call now/)
 })

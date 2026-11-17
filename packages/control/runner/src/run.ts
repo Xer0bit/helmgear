@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ApprovalQueue } from '@helmgear/gateway'
-import { route, type Classifier } from '@helmgear/router'
+import type { ApprovalQueue, AuditLog } from '@helmgear/gateway'
+import { route, type Classifier, type Judge } from '@helmgear/router'
 import { Helmgear, RequestTimeoutError, TransportClosedError, type HelmgearOptions, type RunResult } from '@helmgear/sdk-client'
 import { loadTemplates } from '@helmgear/template'
 import { templatePatch } from './patch.ts'
+import { verifyReply, type ActionFact } from './verify.ts'
 
 /** The part of the harness client the runner uses. */
 export interface HarnessLike {
@@ -23,6 +24,8 @@ export interface RunnerOptions {
     grant(ctx: { tenant: string; sessionId: string; template: string; connectors: string[] }): string
     revoke(token: string): void
     approvals: Pick<ApprovalQueue, 'list'>
+    /** The record of what each session actually did; replies are checked against it. */
+    audit: Pick<AuditLog, 'read'>
   }
   classifier: Classifier
   model: { provider: string; model: string }
@@ -34,13 +37,26 @@ export interface RunnerOptions {
   env?: NodeJS.ProcessEnv
   /** Deadline for one whole run. Default 300,000 ms. */
   timeoutMs?: number
+  /** Reads each reply so it can be checked against the audit log. Without one, results are returned unverified. */
+  judge?: Judge
+  /** Give the agent one turn to fix a reply that does not match what it did. Default true when `judge` is set. */
+  repair?: boolean
   /** Test seam: build the harness client. */
   harnessFactory?: (options: HelmgearOptions) => HarnessLike
 }
 
+/** What the gateway recorded for the session, and whether the reply agrees with it. */
+export interface Checked {
+  /** This session's tool calls as the gateway recorded them, oldest first. Trust these over the reply. */
+  actions: ActionFact[]
+  /** True only when a judge read the reply and found no claim the record does not support. */
+  verified: boolean
+  problems: string[]
+}
+
 export type TaskResult =
-  | { status: 'done'; template: string; sessionId: string; response: string; pendingActionIds: string[] }
-  | { status: 'failed'; template: string; sessionId: string; reason: string; pendingActionIds: string[] }
+  | ({ status: 'done'; template: string; sessionId: string; response: string; pendingActionIds: string[] } & Checked)
+  | ({ status: 'failed'; template: string; sessionId: string; reason: string; pendingActionIds: string[] } & Checked)
   | { status: 'no-template'; reason: string }
   | { status: 'refused'; reason: string }
 
@@ -109,16 +125,37 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
           env: { ...base, HELMGEAR_GATEWAY_TOKEN: token },
         })
         const timeoutMs = options.timeoutMs ?? 300_000
-        const result = await Promise.race([
-          harness.run(request, { sessionId }),
-          new Promise<never>((_resolve, reject) => {
-            deadline = setTimeout(() => reject(new RunnerError('HARNESS_TIMEOUT', `run exceeded ${timeoutMs} ms`)), timeoutMs)
-          }),
-        ])
+        const expired = new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => reject(new RunnerError('HARNESS_TIMEOUT', `run exceeded ${timeoutMs} ms`)), timeoutMs)
+        })
+        const turn = (text: string): Promise<RunResult> => Promise.race([harness!.run(text, { sessionId }), expired])
+        const actions = (): ActionFact[] => options.gateway.audit.read()
+          .filter(entry => entry.sessionId === sessionId)
+          .map(entry => ({ tool: entry.tool, event: entry.event as ActionFact['event'], actionId: entry.actionId }))
+
+        let result = await turn(request)
         if (result.finishReason === 'error') {
-          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds() }
+          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), verified: false, problems: [] }
         }
-        return { status: 'done', template: template.name, sessionId, response: result.finalResponse, pendingActionIds: pendingActionIds() }
+        let check = options.judge
+          ? await verifyReply(result.finalResponse, actions(), options.judge)
+          : { verified: false, problems: ['not verified: no judge configured'], needsAction: false }
+        if (options.judge && !check.verified && (options.repair ?? true)) {
+          // One chance to make the reply true. If only the wording is wrong, calling a tool again
+          // could queue a second, slightly different send, so the agent is told not to.
+          const fix = check.needsAction
+            ? 'If you meant to act, make the tool call now.'
+            : 'Do not call any tool.'
+          const repaired = await turn(`Your reply does not match what you did: ${check.problems.join('; ')}. ${fix} Then give a corrected reply that states only what actually happened.`)
+          if (repaired.finishReason !== 'error') {
+            result = repaired
+            check = await verifyReply(result.finalResponse, actions(), options.judge)
+          }
+        }
+        return {
+          status: 'done', template: template.name, sessionId, response: result.finalResponse, pendingActionIds: pendingActionIds(),
+          actions: actions(), verified: check.verified, problems: check.problems,
+        }
       } catch (error) {
         if (error instanceof TransportClosedError) throw new RunnerError('HARNESS_EXITED', error.message)
         if (error instanceof RequestTimeoutError) throw new RunnerError('HARNESS_TIMEOUT', error.message)
