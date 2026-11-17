@@ -282,3 +282,17 @@ it("passes the tenant's rendered memory for the chosen template into the patch",
   expect(asked).toEqual([['acme', 'social-post']])
   expect(started[0]!.patch).toContain('Our product is called Tidewater.')
 })
+
+it('sums token usage over every turn of the run, including the repair turn', async () => {
+  const attempt = (inputTokens: number, outputTokens: number) => ({ type: 'assistant/message', data: { turn: 1, step: 1, usage: { inputTokens, outputTokens, cacheReadTokens: 100 } } })
+  let turns = 0
+  const { runner } = setup({
+    judge: literalJudge,
+    run: async (_request, { sessionId }) => {
+      turns++
+      const events = (turns === 1 ? [attempt(400, 20), attempt(600, 30), { type: 'turn/end', data: {} }] : [attempt(1000, 5)]) as never
+      return { sessionId, finalResponse: turns === 1 ? 'I sent it.' : 'Nothing was done.', finishReason: 'completed', events, notifications: [] }
+    },
+  })
+  expect(await runner.runTask({ tenant: 'acme', request: 'x' })).toMatchObject({ usage: { inputTokens: 2000, outputTokens: 55, cachedInputTokens: 300 } })
+})

@@ -54,6 +54,8 @@ export interface Checked {
   /** True only when a judge read the reply and found no claim the record does not support. */
   verified: boolean
   problems: string[]
+  /** Model tokens used by every turn of this run. */
+  usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number }
 }
 
 export type TaskResult =
@@ -135,9 +137,19 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
           .filter(entry => entry.sessionId === sessionId)
           .map(entry => ({ tool: entry.tool, event: entry.event as ActionFact['event'], actionId: entry.actionId }))
 
-        let result = await turn(request)
+        const usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 }
+        const count = (turnResult: RunResult): RunResult => {
+          for (const event of turnResult.events as { type: string; data?: { usage?: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number } } }[]) {
+            if (event.type !== 'assistant/message') continue
+            usage.inputTokens += event.data?.usage?.inputTokens ?? 0
+            usage.outputTokens += event.data?.usage?.outputTokens ?? 0
+            usage.cachedInputTokens += event.data?.usage?.cacheReadTokens ?? 0
+          }
+          return turnResult
+        }
+        let result = count(await turn(request))
         if (result.finishReason === 'error') {
-          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), verified: false, problems: [] }
+          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), verified: false, problems: [], usage }
         }
         let check = options.judge
           ? await verifyReply(result.finalResponse, actions(), options.judge)
@@ -148,7 +160,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
           const fix = check.needsAction
             ? 'If you meant to act, make the tool call now.'
             : 'Do not call any tool.'
-          const repaired = await turn(`Your reply does not match what you did: ${check.problems.join('; ')}. ${fix} Then give a corrected reply that states only what actually happened.`)
+          const repaired = count(await turn(`Your reply does not match what you did: ${check.problems.join('; ')}. ${fix} Then give a corrected reply that states only what actually happened.`))
           if (repaired.finishReason !== 'error') {
             result = repaired
             check = await verifyReply(result.finalResponse, actions(), options.judge)
@@ -156,7 +168,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
         }
         return {
           status: 'done', template: template.name, sessionId, response: result.finalResponse, pendingActionIds: pendingActionIds(),
-          actions: actions(), verified: check.verified, problems: check.problems,
+          actions: actions(), verified: check.verified, problems: check.problems, usage,
         }
       } catch (error) {
         if (error instanceof TransportClosedError) throw new RunnerError('HARNESS_EXITED', error.message)
