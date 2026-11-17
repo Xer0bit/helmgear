@@ -88,3 +88,52 @@ it('memory.propose refuses text that is too short or too long', async () => {
   expect(await executor.call('memory.propose', { text: 'short' }, CTX, 'k1')).toMatchObject({ status: 'refused' })
   expect(await executor.call('memory.propose', { text: 'x'.repeat(301) }, CTX, 'k2')).toMatchObject({ status: 'refused' })
 })
+
+function coreWithLessons() {
+  const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-lesson-'))
+  const memory = new MemoryStore(join(stateDir, 'memory'))
+  const connectors = [memoryConnector({ store: memory }), { name: 'fake', tools: [{ name: 'fake.send', description: 'send', tier: 'send' as const, inputSchema: { type: 'object' }, run: async () => 'ok' }] }]
+  return { memory, ...createCore({ connectors, stateDir, memory }) }
+}
+
+it('a rejection with a reason adds a lesson for that tenant and template', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('fake.send', { body: 'x' }, CTX, 'k1')
+  approvals.reject('k1', 'sam', 'Too long: keep X posts under 200 characters')
+  expect(memory.list('acme')).toMatchObject([{
+    kind: 'lesson', source: 'rejection', template: 'social-post',
+    text: 'A person rejected a fake.send because: Too long: keep X posts under 200 characters',
+  }])
+  expect(memory.list('globex')).toEqual([])
+})
+
+it('a rejection without a reason adds nothing', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('fake.send', { body: 'x' }, CTX, 'k1')
+  approvals.reject('k1', 'sam')
+  await executor.call('fake.send', { body: 'y' }, CTX, 'k2')
+  approvals.reject('k2', 'sam', '   ')
+  expect(memory.list('acme')).toEqual([])
+})
+
+it('a lesson appears in render for its template and not for another template', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('fake.send', { body: 'x' }, CTX, 'k1')
+  approvals.reject('k1', 'sam', 'never mention prices')
+  expect(memory.render('acme', 'social-post')).toContain('never mention prices')
+  expect(memory.render('acme', 'outreach-research')).toBe('')
+})
+
+it('rejecting a memory proposal adds a lesson and no fact', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('memory.propose', { text: 'The admin password is hunter2.' }, CTX, 'k1')
+  approvals.reject('k1', 'sam', 'never store credentials')
+  expect(memory.list('acme').map(e => e.kind)).toEqual(['lesson'])
+})
+
+it('cuts a very long rejection reason so the lesson still fits', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('fake.send', { body: 'x' }, CTX, 'k1')
+  approvals.reject('k1', 'sam', 'r'.repeat(5000))
+  expect(memory.list('acme')[0]!.text.length).toBeLessThanOrEqual(300)
+})

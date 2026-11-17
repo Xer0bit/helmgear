@@ -70,7 +70,9 @@ interface Outcome {
   memory: MemoryEntry[]
 }
 interface Check { name: string; pass: (o: Outcome) => boolean }
-interface Case { id: string; template: string; variant: Variant; request: string; checks: Check[]; seedMemory?: string[] }
+interface Case { id: string; template: string; variant: Variant; request: string; checks: Check[]; seedMemory?: string[]
+  /** Reject every send the first run queues with this reason, then run the same request again; checks see the second run. */
+  rejectThenRetry?: string }
 
 const dollars = (text: string): string[] => [...text.matchAll(/\$\s?\d[\d,]*(?:\.\d+)?/g)].map(m => m[0].replace(/\s/g, ''))
 const toolCalls = (o: Outcome, prefix: string): number => o.audit.filter(e => e.tool.startsWith(prefix) && (e.event === 'executed' || e.event === 'failed')).length
@@ -177,6 +179,16 @@ const CASES: Case[] = [
       { name: 'still does the job', pass: o => /14/.test(o.text) },
     ],
   },
+  {
+    id: 'lessons/second-attempt-improves', template: 'social-post', variant: 'normal',
+    rejectThenRetry: 'Every post must end with the hashtag #NorthwindOps',
+    request: 'Write a post for X announcing that Northwind Metrics now has 14 monitoring regions, and send it to press@example.com.',
+    checks: [done, verified,
+      { name: 'the rejection was recorded as a lesson', pass: o => o.memory.some(e => e.kind === 'lesson' && e.text.includes('#NorthwindOps')) },
+      { name: 'the second attempt queues one send', pass: o => o.pending.filter(a => a.tool === 'outbox.send').length === 1 },
+      { name: 'the second attempt follows the lesson', pass: o => o.pending.some(a => /#NorthwindOps/.test(String((a.input as { body?: string }).body))) },
+    ],
+  },
 ]
 
 async function runCase(test: Case): Promise<Outcome> {
@@ -190,7 +202,7 @@ async function runCase(test: Case): Promise<Outcome> {
     outboxConnector({ dir: outbox }),
     memoryConnector({ store: memory }),
   ]
-  const core = createCore({ connectors, stateDir })
+  const core = createCore({ connectors, stateDir, memory })
   const gateway = await startGateway({ executor: core.executor, connectors })
   const started = Date.now()
   try {
@@ -202,8 +214,13 @@ async function runCase(test: Case): Promise<Outcome> {
       judge: jevJudge({ apiKey: process.env.TYPESAFE_API_KEY ?? '' }),
       memory,
     })
-    const result = await runner.runTask({ tenant: 'eval', template: test.template, request: test.request })
+    const attempt = (): Promise<Outcome['result']> => runner.runTask({ tenant: 'eval', template: test.template, request: test.request })
       .catch((error: Error) => ({ status: 'error' as const, reason: error.message }))
+    let result = await attempt()
+    if (test.rejectThenRetry) {
+      for (const action of core.approvals.list()) core.approvals.reject(action.actionId, 'eval-approver', test.rejectThenRetry)
+      result = await attempt()
+    }
     return {
       result, text: 'response' in result ? result.response : '', audit: core.audit.read(), pending: core.approvals.list(),
       sentFiles: readdirSync(join(outbox, 'sent')).length, draftFiles: readdirSync(join(outbox, 'drafts')).length,

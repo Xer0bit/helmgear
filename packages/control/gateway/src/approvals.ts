@@ -23,6 +23,7 @@ export class ApprovalQueue {
   private readonly run: (action: PendingAction) => Promise<unknown>
 
   private readonly onResolved: ((actionId: string) => void) | undefined
+  private readonly onRejected: ((action: PendingAction, approver: string, reason: string | undefined) => void) | undefined
 
   constructor(options: {
     dir: string
@@ -30,8 +31,11 @@ export class ApprovalQueue {
     run: (action: PendingAction) => Promise<unknown>
     /** Called once an action stops being pending: after it executed, and after it was rejected. */
     onResolved?: (actionId: string) => void
+    /** Called after a rejection is audited. The reason is the approver's own words. */
+    onRejected?: (action: PendingAction, approver: string, reason: string | undefined) => void
   }) {
     this.onResolved = options.onResolved
+    this.onRejected = options.onRejected
     this.dir = options.dir
     this.audit = options.audit
     this.run = options.run
@@ -134,5 +138,6 @@ export class ApprovalQueue {
       payloadSha256: action.payloadSha256 ?? '', ...(reason ? { detail: reason } : {}),
     })
     this.onResolved?.(actionId)
+    if (action.ctx && action.tool) this.onRejected?.(action as PendingAction, approver, reason)
   }
 }

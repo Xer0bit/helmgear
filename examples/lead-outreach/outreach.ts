@@ -8,7 +8,7 @@
 //
 // "Send" here writes a file under tmp/outreach/outbox/sent; no email leaves the machine.
 import { readFileSync } from 'node:fs'
-import { createCore, firecrawlConnector, outboxConnector, startGateway } from '@helmgear/gateway'
+import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway } from '@helmgear/gateway'
 import { createRunner } from '@helmgear/runner'
 
 interface Lead { company: string; website: string; email: string }
@@ -16,8 +16,10 @@ interface LeadFile { offer: string; sender: string; leads: Lead[] }
 
 const TENANT = 'outreach'
 const stateDir = 'tmp/outreach'
-const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` })]
-const core = createCore({ connectors, stateDir })
+// Approved facts and the reasons you give when rejecting an email; later runs read both.
+const memory = new MemoryStore(`${stateDir}/memory`)
+const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory })]
+const core = createCore({ connectors, stateDir, memory })
 const [command, ...rest] = process.argv.slice(2)
 
 function show(): void {
@@ -47,6 +49,7 @@ if (command === 'run') {
     // The template is named outright, so nothing is routed and no classifier is called.
     classifier: { classify: async () => { throw new Error('routing is not used here') } },
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    memory,
   })
   const started = Date.now()
   try {
@@ -72,7 +75,7 @@ if (command === 'run') {
 } else if (command === 'approve' && rest[0]) {
   for (const id of resolve(rest[0])) console.log(id.slice(0, 12), JSON.stringify(await core.approvals.approve(id, process.env.USER ?? 'operator')))
 } else if (command === 'reject' && rest[0]) {
-  for (const id of resolve(rest[0])) { core.approvals.reject(id, process.env.USER ?? 'operator', rest.slice(1).join(' ') || undefined); console.log(id.slice(0, 12), 'rejected') }
+  for (const id of resolve(rest[0])) { core.approvals.reject(id, process.env.USER ?? 'operator', rest.slice(1).join(' ') || undefined); console.log(id.slice(0, 12), 'rejected.', rest.length > 1 ? 'Lesson recorded: later runs will see your reason.' : 'Give a reason to teach the agent.') }
 } else {
   console.error('usage: pnpm outreach run [leads.json] | list | approve <id|all> | reject <id> [reason]')
   process.exit(2)

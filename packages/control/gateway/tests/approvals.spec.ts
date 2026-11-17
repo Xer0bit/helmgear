@@ -191,3 +191,12 @@ it('forgets a cached pending result once the action is no longer pending', async
   expect(await core.executor.call('fake.send', INPUT, CTX, 'k1')).toEqual({ status: 'pending', actionId: 'k1' })
   expect(core.approvals.list()).toHaveLength(1)
 })
+
+it('calls onRejected with the action, approver and reason after auditing', () => {
+  const seen: unknown[] = []
+  const base = setup()
+  const queue = new ApprovalQueue({ ...base.options, onRejected: (action, approver, reason) => { seen.push([action.actionId, approver, reason, base.audit.read().at(-1)!.event]) } })
+  queue.enqueue(ACTION)
+  queue.reject('a1', 'sam', 'wrong recipient')
+  expect(seen).toEqual([['a1', 'sam', 'wrong recipient', 'rejected']])
+})
