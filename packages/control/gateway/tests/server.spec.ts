@@ -129,3 +129,24 @@ it('lists only the granted tool when the grant names one tool', async () => {
   expect((await mcp.listTools()).tools.map(t => t.name)).toEqual(['alpha__read'])
   expect((await mcp.callTool({ name: 'alpha__send', arguments: { q: 'go' } })).isError).toBe(true)
 })
+
+it('describe lists the tools a grant would see, under the names the model sees', async () => {
+  const { server } = await gateway()
+  expect(server.describe(['alpha.read', 'beta'])).toEqual([
+    { name: 'mcp__gateway__alpha__read', tier: 'read', description: 'does alpha.read' },
+    { name: 'mcp__gateway__beta__read', tier: 'read', description: 'does beta.read' },
+  ])
+  expect(server.describe([])).toEqual([])
+})
+
+it('stops serving tool calls once the grant\'s budget is used up, and tells the agent to answer', async () => {
+  const { server, calls } = await gateway()
+  const token = server.grant({ tenant: 't1', sessionId: 's1', template: 'social-post', connectors: ['alpha'], maxToolCalls: 2 })
+  const mcp = await client(server, ['alpha'], token)
+  await mcp.callTool({ name: 'alpha__read', arguments: { q: 'one' } })
+  await mcp.callTool({ name: 'alpha__read', arguments: { q: 'two' } })
+  const third = await mcp.callTool({ name: 'alpha__read', arguments: { q: 'three' } })
+  expect(third.isError).toBe(true)
+  expect(text(third)).toMatch(/budget.*used up/i)
+  expect(calls).toHaveLength(2)
+})

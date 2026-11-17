@@ -7,13 +7,18 @@ import type { Executor } from './execute.ts'
 import type { CallContext, Connector } from './registry.ts'
 
 /** Who one agent run is: fixed by the application when it grants the run's token. */
-export type Grant = Required<CallContext>
+export type Grant = Required<CallContext> & {
+  /** The most tool calls this run may make. Absent means no limit. */
+  maxToolCalls?: number
+}
 
 export interface GatewayServer {
   url: string
   /** Mint a bearer token bound to one run. The caller's identity and connectors come from it alone. */
   grant(ctx: Grant): string
   revoke(token: string): void
+  /** The tools a grant for these connectors would see, under the names the model sees. */
+  describe(connectors: string[]): { name: string; tier: 'read' | 'draft' | 'send'; description: string }[]
   close(): Promise<void>
 }
 
@@ -35,7 +40,7 @@ export async function startGateway(options: {
   port?: number
 }): Promise<GatewayServer> {
   // Keyed by the token's hash, so a lookup does not compare secret bytes.
-  const grants = new Map<string, Grant>()
+  const grants = new Map<string, Grant & { used: number }>()
 
   const handler = createMcpHandler((request) => {
     const ctx = grants.get(fingerprint(bearer(request.requestInfo?.headers.get('authorization'))))
@@ -49,13 +54,18 @@ export async function startGateway(options: {
     server.setRequestHandler('tools/call', async (call): Promise<CallToolResult> => {
       const say = (text: string, isError = false): CallToolResult => ({ content: [{ type: 'text', text }], ...(isError ? { isError } : {}) })
       if (!ctx) return say('gateway: this token is not granted', true)
+      // A hard stop on runaway research: the count lives here, where the agent cannot reset it.
+      if (ctx.maxToolCalls !== undefined && ctx.used >= ctx.maxToolCalls) {
+        return say('The tool budget for this task is used up. Do not call more tools; answer now with what you have, and say what you could not check.', true)
+      }
+      ctx.used++
       const name = call.params.name.replace('__', '.')
       const input = call.params.arguments ?? {}
       // The same call repeated in one session is one action: a model that retries after a
       // timeout gets the first result instead of sending twice.
       const key = createHash('sha256').update([ctx.tenant, ctx.sessionId, name, canonicalJson(input)].join('\n')).digest('hex')
       try {
-        const result = await options.executor.call(name, input, ctx, key)
+        const result = await options.executor.call(name, input, { tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: ctx.connectors }, key)
         if (result.status === 'refused') return say(`Refused: ${result.reason}`, true)
         if (result.status === 'pending') return say(`Queued for approval as ${result.actionId}. Do not retry; continue with other work.`)
         const body = JSON.stringify(result.result)
@@ -87,10 +97,17 @@ export async function startGateway(options: {
     url: `http://127.0.0.1:${address.port}/mcp`,
     grant(ctx) {
       const token = randomBytes(32).toString('base64url')
-      grants.set(fingerprint(token), { tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: [...ctx.connectors] })
+      grants.set(fingerprint(token), {
+        tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: [...ctx.connectors], used: 0,
+        ...(ctx.maxToolCalls === undefined ? {} : { maxToolCalls: ctx.maxToolCalls }),
+      })
       return token
     },
     revoke(token) { grants.delete(fingerprint(token)) },
+    describe(allowed) {
+      return options.connectors.flatMap(c => c.tools.filter(tool => allowed.includes(c.name) || allowed.includes(tool.name)))
+        .map(tool => ({ name: `mcp__gateway__${tool.name.replace('.', '__')}`, tier: tool.tier, description: tool.description }))
+    },
     async close() {
       grants.clear()
       await handler.close()

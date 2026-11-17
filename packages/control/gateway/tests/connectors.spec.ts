@@ -36,7 +36,7 @@ it('firecrawl.search posts the query to the base URL and returns the results', a
 
 it('firecrawl tools are read tier, untrusted, and default to the local instance', () => {
   const connector = firecrawlConnector({})
-  expect(connector.tools.map(t => [t.name, t.tier, t.untrusted])).toEqual([['firecrawl.search', 'read', true], ['firecrawl.scrape', 'read', true]])
+  expect(connector.tools.map(t => [t.name, t.tier, t.untrusted])).toEqual([['firecrawl.research', 'read', true], ['firecrawl.search', 'read', true], ['firecrawl.scrape', 'read', true]])
 })
 
 it('firecrawl.scrape returns the page markdown', async () => {
@@ -78,7 +78,7 @@ it('firecrawl tools surface an HTTP error status as a thrown error with the stat
 it('firecrawl.scrape truncates a very long page and says so', async () => {
   const { fetch } = fakeFetch({ success: true, data: { markdown: 'x'.repeat(50_000) } })
   const result = await tool(firecrawlConnector({ fetch, lookup: PUBLIC }), 'firecrawl.scrape').run({ url: 'https://example.com' }, CTX) as { markdown: string; truncated: boolean }
-  expect(result.markdown).toHaveLength(20_000)
+  expect(result.markdown).toHaveLength(8_000)
   expect(result.truncated).toBe(true)
 })
 
@@ -134,4 +134,34 @@ it('firecrawl.search leaves out results on blocked hosts', async () => {
   ] } })
   const result = await tool(firecrawlConnector({ fetch }), 'firecrawl.search').run({ query: 'q' }, CTX) as { results: { url: string }[] }
   expect(result.results.map(r => r.url)).toEqual(['https://a.example/x'])
+})
+
+it('firecrawl.research searches, then reads the top pages side by side, skipping blocked and failing ones', async () => {
+  const requests: { path: string; body: any; at: number }[] = []
+  let live = 0
+  let peak = 0
+  const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const path = new URL(String(url)).pathname
+    const body = JSON.parse(init!.body as string)
+    requests.push({ path, body, at: Date.now() })
+    if (path === '/v2/search') {
+      return new Response(JSON.stringify({ success: true, data: { web: [
+        { url: 'https://a.example/', title: 'A', description: 'a' }, { url: 'https://www.linkedin.com/company/x', title: 'L', description: 'l' },
+        { url: 'https://b.example/', title: 'B', description: 'b' }, { url: 'https://broken.example/', title: 'X', description: 'x' }, { url: 'https://c.example/', title: 'C', description: 'c' },
+      ] } }))
+    }
+    peak = Math.max(peak, ++live)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    live--
+    if (body.url.includes('broken')) return new Response('{}', { status: 500 })
+    return new Response(JSON.stringify({ success: true, data: { markdown: `page ${body.url} ${'x'.repeat(9000)}` } }))
+  }) as typeof globalThis.fetch
+  const research = tool(firecrawlConnector({ baseUrl: 'http://fc.test', fetch, lookup: PUBLIC }), 'firecrawl.research')
+  const result = await research.run({ query: 'who needs postmortems', pages: 3 }, CTX) as { pages: { url: string; title: string; text: string; truncated: boolean }[]; skipped: string[] }
+  expect(result.pages.map(p => p.url)).toEqual(['https://a.example/', 'https://b.example/', 'https://c.example/'])
+  expect(result.pages[0]!.text.length).toBe(4000)
+  expect(result.pages[0]!.truncated).toBe(true)
+  expect(result.skipped).toEqual(['https://broken.example/'])
+  expect(requests.filter(r => r.path === '/v2/scrape').map(r => r.body.url)).not.toContain('https://www.linkedin.com/company/x')
+  expect(peak).toBeGreaterThan(1)
 })

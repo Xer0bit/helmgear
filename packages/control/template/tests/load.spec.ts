@@ -27,7 +27,7 @@ it('loads a valid template', () => {
   write(dir, 'social-post', VALID)
   expect(loadTemplates(dir)).toEqual([{
     name: 'social-post', description: 'Does social-post.', persona: VALID.persona,
-    connectors: ['firecrawl', 'outbox'], dataClass: 'public', reasoningEffort: 'off', dir: join(dir, 'social-post'),
+    connectors: ['firecrawl', 'outbox'], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12, dir: join(dir, 'social-post'),
   }])
 })
 
@@ -94,4 +94,14 @@ it('loads a template whose folder is a symlink', () => {
   const dir = root()
   symlinkSync(join(real, 'alpha'), join(dir, 'alpha'))
   expect(loadTemplates(dir).map(t => t.name)).toEqual(['alpha'])
+})
+
+it('reads an optional tool budget and rejects one that is not a positive whole number', () => {
+  const dir = root()
+  write(dir, 'a', { ...VALID, maxToolCalls: 6 })
+  write(dir, 'b', VALID)
+  expect(loadTemplates(dir).map(t => t.maxToolCalls)).toEqual([6, 12])
+  const bad = root()
+  write(bad, 'a', { ...VALID, maxToolCalls: 0 })
+  expect(failure(bad).field).toBe('metadata.helmgear.maxToolCalls')
 })

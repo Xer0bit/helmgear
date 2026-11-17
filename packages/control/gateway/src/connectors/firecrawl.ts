@@ -2,7 +2,8 @@ import { lookup as dnsLookup } from 'node:dns/promises'
 import { BlockList, isIP } from 'node:net'
 import type { Connector } from '../registry.ts'
 
-const MAX_MARKDOWN = 20_000
+const MAX_MARKDOWN = 8_000
+const MAX_RESEARCH_PAGE = 4_000
 const TIMEOUT_MS = 30_000
 
 export interface FirecrawlOptions {
@@ -76,6 +77,37 @@ export function firecrawlConnector(options: FirecrawlOptions = {}): Connector {
   return {
     name: 'firecrawl',
     tools: [
+      {
+        name: 'firecrawl.research',
+        description: 'Research a question in one step: searches the web and returns the text of the top pages. Prefer this over separate search and read calls.',
+        inputSchema: {
+          type: 'object',
+          properties: { query: { type: 'string', minLength: 1 }, pages: { type: 'integer', minimum: 1, maximum: 5 } },
+          required: ['query'],
+          additionalProperties: false,
+        },
+        tier: 'read',
+        untrusted: true,
+        async run(input) {
+          const wanted = typeof input.pages === 'number' ? input.pages : 3
+          const data = await post('/v2/search', { query: input.query, limit: wanted + 3 })
+          const web = Array.isArray(data.web) ? data.web as Record<string, unknown>[] : []
+          const picked = web.filter((result) => {
+            try { return !isBlocked(hostOf(new URL(String(result.url))), blockedHosts) } catch { return false }
+          })
+          // Read the candidates side by side and keep the first `wanted` that load; one model round trip instead of several.
+          const read = await Promise.all(picked.map(async (result) => {
+            try {
+              const url = (await checked(String(result.url), blockedHosts, lookup)).href
+              const page = await post('/v2/scrape', { url, formats: ['markdown'] })
+              const markdown = typeof page.markdown === 'string' ? page.markdown : ''
+              return { url, title: String(result.title ?? ''), text: markdown.slice(0, MAX_RESEARCH_PAGE), truncated: markdown.length > MAX_RESEARCH_PAGE }
+            } catch { return { failed: String(result.url) } }
+          }))
+          const pages = read.filter((page): page is { url: string; title: string; text: string; truncated: boolean } => 'url' in page)
+          return { pages: pages.slice(0, wanted), skipped: read.flatMap(page => 'failed' in page ? [page.failed] : []) }
+        },
+      },
       {
         name: 'firecrawl.search',
         description: 'Search the web. Returns a list of results with url, title and description.',

@@ -1,6 +1,7 @@
 export { runBatch } from './batch.ts'
 export type { BatchItem, BatchResult } from './batch.ts'
 export { templatePatch } from './patch.ts'
+export type { ToolInfo } from './patch.ts'
 export { createRunner, RunnerError } from './run.ts'
 export type { Checked, HarnessLike, RunnerOptions, TaskInput, TaskResult } from './run.ts'
 export { verifyReply } from './verify.ts'

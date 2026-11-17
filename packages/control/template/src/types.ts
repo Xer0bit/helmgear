@@ -13,6 +13,8 @@ export interface Template {
   connectors: string[]
   dataClass: DataClass
   reasoningEffort: ReasoningEffort
+  /** The most tool calls one task may make; the gateway refuses the rest. Default 12. */
+  maxToolCalls: number
   /** Absolute folder path. */
   dir: string
 }

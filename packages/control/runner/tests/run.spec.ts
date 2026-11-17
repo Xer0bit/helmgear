@@ -21,14 +21,16 @@ function templatesDir(): string {
 const always = (label: string): Classifier => ({ classify: async ({ options }) => ({ choices: options.map(o => ({ label: o.label, probability: o.label === label ? 0.95 : 0 })), noneFits: 0.05 }) })
 
 interface Grant { tenant: string; sessionId: string; template: string; connectors: string[]; revoked: boolean }
-interface Started { options: HelmgearOptions; patch: string; closed: boolean; ran: { request: string; sessionId: string }[] }
+interface Started { options: HelmgearOptions; patch: string; closed: boolean; ran: { request: string; sessionId: string }[]; resumed?: string; order: number }
 
 type AuditFact = { sessionId: string; tool: string; event: string; actionId: string }
-function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; pending?: { actionId: string; ctx: { sessionId: string; tenant: string } }[]; audit?: AuditFact[] } = {}) {
+function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; pending?: { actionId: string; ctx: { sessionId: string; tenant: string } }[]; audit?: AuditFact[]; resumable?: boolean } = {}) {
   const started: Started[] = []
   const grants: Grant[] = []
   const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-run-state-'))
-  const { run, pending, audit, ...rest } = overrides
+  const { run, pending, audit, resumable, ...rest } = overrides
+  let clock = 0
+  const closedAt: number[] = []
   const runner = createRunner({
     templatesDir: templatesDir(), stateDir,
     gateway: {
@@ -37,23 +39,25 @@ function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; p
       revoke: (token) => { grants[Number(token.split('-')[2]) - 1]!.revoked = true },
       approvals: { list: () => (pending ?? []) as never },
       audit: { read: () => (audit ?? []) as never },
+      describe: connectors => connectors.includes('outbox') ? [{ name: 'mcp__gateway__outbox__send', tier: 'send' as const, description: 'Send a message.' }] : [],
     },
     classifier: always('social-post'),
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
     harnessFactory(options) {
-      const record: Started = { options, patch: readFileSync(options.patches![0]!, 'utf8'), closed: false, ran: [] }
+      const record: Started = { options, patch: readFileSync(options.patches![0]!, 'utf8'), closed: false, ran: [], order: ++clock }
       started.push(record)
       return {
         run: run ?? (async (request, runOptions) => {
           record.ran.push({ request, sessionId: runOptions.sessionId })
           return { sessionId: runOptions.sessionId, finalResponse: 'done it', finishReason: 'completed', events: [], notifications: [] }
         }),
-        close: async () => { record.closed = true },
+        close: async () => { record.closed = true; closedAt.push(++clock) },
+        ...(resumable === false ? {} : { resume: async (sessionId: string) => { record.resumed = sessionId } }),
       }
     },
     ...rest,
   })
-  return { runner, started, stateDir, grants }
+  return { runner, started, stateDir, grants, closedAt }
 }
 
 const saved = { ...process.env }
@@ -171,7 +175,7 @@ it('passes only the model key to the child environment by default', async () => 
 it('grants the gateway token for exactly this run and revokes it afterwards, also after an error', async () => {
   const ok = setup()
   const result = await ok.runner.runTask({ tenant: 'acme', request: 'a' }) as { sessionId: string }
-  expect(ok.grants).toEqual([{ tenant: 'acme', sessionId: result.sessionId, template: 'social-post', connectors: ['outbox'], revoked: true }])
+  expect(ok.grants).toEqual([{ tenant: 'acme', sessionId: result.sessionId, template: 'social-post', connectors: ['outbox'], maxToolCalls: 12, revoked: true }])
   const broken = setup({ run: async () => { throw new Error('unexpected') } })
   await expect(broken.runner.runTask({ tenant: 'acme', request: 'a' })).rejects.toThrow('unexpected')
   expect(broken.grants.map(g => g.revoked)).toEqual([true])
@@ -305,4 +309,70 @@ it('lets one task override the reasoning effort, and reports its session and tem
   expect(seen).toEqual([{ sessionId: result.sessionId, template: 'social-post' }])
   await runner.runTask({ tenant: 'acme', request: 'draft a tweet' })
   expect(started[1]!.options.reasoningEffort).toBe('low')
+})
+
+it('plan mode returns a plan without granting any tool, and does not check or repair it', async () => {
+  let turns = 0
+  const { runner, started, grants } = setup({ judge: literalJudge, run: async (request, { sessionId }) => { turns++; started.at(-1)!.ran.push({ request, sessionId }); return reply(sessionId, 'I will search, then draft, and queue the send.') } })
+  const result = await runner.runTask({ tenant: 'acme', request: 'post about our launch', mode: 'plan' })
+  expect(result).toMatchObject({ status: 'plan', template: 'social-post', plan: 'I will search, then draft, and queue the send.' })
+  expect(grants[0]!.connectors).toEqual([])
+  expect(started[0]!.ran[0]!.request).toMatch(/Do not act yet/)
+  expect(started[0]!.ran[0]!.request).toContain('post about our launch')
+  expect(started[0]!.patch).toMatch(/after the plan is approved/)
+  expect(started[0]!.patch).toContain('mcp__gateway__outbox__send')
+  expect(turns).toBe(1)
+})
+
+it('continues an existing session: resumes it under the same id with the template tools', async () => {
+  const { runner, started, grants } = setup()
+  const result = await runner.runTask({ tenant: 'acme', request: 'Approved. Carry out the plan.', template: 'social-post', continue: { sessionId: 'session-abc123' } })
+  expect(result).toMatchObject({ status: 'done', sessionId: 'session-abc123' })
+  expect(started[0]!.resumed).toBe('session-abc123')
+  expect(started[0]!.ran).toEqual([{ request: 'Approved. Carry out the plan.', sessionId: 'session-abc123' }])
+  expect(grants[0]).toMatchObject({ sessionId: 'session-abc123', connectors: ['outbox'] })
+  expect(started[0]!.patch).toContain('- mcp__gateway__outbox__send (held for approval): Send a message.')
+})
+
+it('refuses to continue a session without its template or with an unsafe id', async () => {
+  const { runner, started } = setup()
+  expect(await runner.runTask({ tenant: 'acme', request: 'x', continue: { sessionId: 'session-abc123' } })).toMatchObject({ status: 'refused' })
+  expect(await runner.runTask({ tenant: 'acme', request: 'x', template: 'social-post', continue: { sessionId: '../../etc' } })).toMatchObject({ status: 'refused' })
+  expect(started).toHaveLength(0)
+})
+
+it('escalates a failed check: a second process with more thinking resumes the session and repairs there', async () => {
+  const audit: AuditFact[] = []
+  let turns = 0
+  const { runner, started, closedAt } = setup({
+    audit, judge: literalJudge,
+    run: async (_request, { sessionId }) => {
+      if (++turns === 1) return reply(sessionId, 'I sent the message.')
+      audit.push({ sessionId, tool: 'outbox.send', event: 'pending', actionId: 'a1' })
+      return reply(sessionId, 'Now queued for approval.')
+    },
+  })
+  const result = await runner.runTask({ tenant: 'acme', request: 'send it' }) as { sessionId: string; verified: boolean; response: string }
+  expect(result).toMatchObject({ verified: true, response: 'Now queued for approval.' })
+  expect(started).toHaveLength(2)
+  expect(started[0]!.options.reasoningEffort).toBe('low')
+  expect(started[1]!.options.reasoningEffort).toBe('high')
+  expect(started[1]!.resumed).toBe(result.sessionId)
+  // The first process is gone before the second opens the same session.
+  expect(closedAt[0]).toBeLessThan(started[1]!.order)
+  expect(started.every(s => s.closed)).toBe(true)
+})
+
+it('repairs in the same process when the harness cannot resume a session', async () => {
+  let turns = 0
+  const { runner, started } = setup({ judge: literalJudge, resumable: false, run: async (_request, { sessionId }) => reply(sessionId, ++turns === 1 ? 'I sent the message.' : 'Correction: no message went out.') })
+  expect(await runner.runTask({ tenant: 'acme', request: 'send it' })).toMatchObject({ verified: true })
+  expect(started).toHaveLength(1)
+  expect(turns).toBe(2)
+})
+
+it("grants the template's tool budget with the token", async () => {
+  const { runner, grants } = setup()
+  await runner.runTask({ tenant: 'acme', request: 'draft a tweet' })
+  expect((grants[0] as { maxToolCalls?: number }).maxToolCalls).toBe(12)
 })

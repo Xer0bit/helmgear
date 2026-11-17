@@ -4,7 +4,7 @@ import { parse as parseYaml } from 'yaml'
 import { TemplateError, type DataClass, type ReasoningEffort, type Template } from './types.ts'
 
 const NAME = /^[a-z0-9-]{1,48}$/
-const KEYS = ['persona', 'connectors', 'dataClass', 'reasoningEffort']
+const KEYS = ['persona', 'connectors', 'dataClass', 'reasoningEffort', 'maxToolCalls']
 const DATA_CLASSES: readonly string[] = ['public', 'sensitive'] satisfies DataClass[]
 const EFFORTS: readonly string[] = ['off', 'low', 'high', 'max'] satisfies ReasoningEffort[]
 
@@ -45,8 +45,10 @@ function loadOne(dir: string, folder: string): Template {
   if (typeof effort !== 'string' || !EFFORTS.includes(effort)) {
     return fail('metadata.helmgear.reasoningEffort', `must be one of ${EFFORTS.join(', ')}`)
   }
+  const budget = meta.maxToolCalls ?? 12
+  if (typeof budget !== 'number' || !Number.isInteger(budget) || budget < 1) return fail('metadata.helmgear.maxToolCalls', 'must be a whole number of at least 1')
   return {
-    name, description, persona, connectors: [...connectors],
+    name, description, persona, connectors: [...connectors], maxToolCalls: budget,
     dataClass: meta.dataClass as DataClass, reasoningEffort: effort as ReasoningEffort, dir,
   }
 }

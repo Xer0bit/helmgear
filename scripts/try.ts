@@ -29,7 +29,7 @@ try {
   const started = Date.now()
   const result = await runner.runTask({ tenant: 'demo', request, ...(template ? { template } : {}) })
   console.log(`\n[${result.status}] in ${((Date.now() - started) / 1000).toFixed(1)} s`, 'template' in result ? `· template: ${result.template}` : '')
-  console.log('response' in result ? `\n${result.response}\n` : `reason: ${result.reason}\n`)
+  console.log('response' in result ? `\n${result.response}\n` : 'reason' in result ? `reason: ${result.reason}\n` : `\n${result.plan}\n`)
   for (const action of core.approvals.list('demo')) {
     console.log(`waiting for approval: ${action.tool} ${JSON.stringify(action.input)}`)
     if (approve) console.log('  approved ->', JSON.stringify(await core.approvals.approve(action.actionId, 'you')))
