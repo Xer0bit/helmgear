@@ -9,7 +9,7 @@
 // "Send" here writes a file under tmp/outreach/outbox/sent; no email leaves the machine.
 import { readFileSync } from 'node:fs'
 import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway } from '@helmgear/gateway'
-import { createRunner } from '@helmgear/runner'
+import { createRunner, runBatch } from '@helmgear/runner'
 
 interface Lead { company: string; website: string; email: string }
 interface LeadFile { offer: string; sender: string; leads: Lead[] }
@@ -54,13 +54,14 @@ if (command === 'run') {
   const started = Date.now()
   try {
     // Leads run side by side: each is its own agent process and its own gateway token.
-    const results = await Promise.all(file.leads.map(async (lead) => {
-      const t = Date.now()
-      const request = `Research ${lead.company} (${lead.website}). We offer: ${file.offer}. `
-        + `Write a first-touch email from ${file.sender} and send it to ${lead.email}.`
-      const result = await runner.runTask({ tenant: TENANT, template: 'outreach-research', request })
-        .catch((error: Error) => ({ status: 'error' as const, reason: error.message }))
-      return { lead, result, seconds: (Date.now() - t) / 1000 }
+    const batch = await runBatch(runner, file.leads.map(lead => ({
+      tenant: TENANT, template: 'outreach-research',
+      request: `Research ${lead.company} (${lead.website}). We offer: ${file.offer}. `
+        + `Write a first-touch email from ${file.sender} and send it to ${lead.email}.`,
+    })))
+    const results = batch.map((entry, i) => ({
+      lead: file.leads[i]!, seconds: entry.seconds,
+      result: 'result' in entry ? entry.result : { status: 'error' as const, reason: entry.error.message },
     }))
     for (const { lead, result, seconds } of results) {
       console.log(`\n════ ${lead.company} · ${result.status} · ${seconds.toFixed(1)} s ════`)
