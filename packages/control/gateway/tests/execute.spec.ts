@@ -94,3 +94,32 @@ it('refuses a tool whose connector the template is not allowed to use', async ()
   expect(audit.read()).toMatchObject([{ event: 'refused', tool: 'fake.read' }])
   expect(await executor.call('fake.read', { q: 'hi' }, { ...CTX, connectors: ['fake'] }, 'k2')).toMatchObject({ status: 'ok' })
 })
+
+it('rejects a connector or tool name that is not <connector>.<action> in lowercase letters, digits, - and _', () => {
+  const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-exec-'))
+  const audit = new AuditLog(join(stateDir, 'audit.jsonl'))
+  const make = (connector: string, tool: string) => new Executor({
+    stateDir, audit, queue: { enqueue: () => {} },
+    connectors: [{ name: connector, tools: [{ name: tool, description: 'x', inputSchema: { type: 'object' }, tier: 'read', run: async () => 1 }] }],
+  })
+  for (const [connector, tool] of [['my__conn', 'my__conn.send'], ['a', 'a.b.c'], ['Fake', 'Fake.read'], ['a.b', 'a.b.read']]) {
+    expect(() => make(connector!, tool!), tool).toThrow(/name/)
+  }
+  expect(() => make('my-conn', 'my-conn.do_it')).not.toThrow()
+})
+
+it('allows a single tool when the context lists its full name and refuses its siblings', async () => {
+  const { executor, calls } = setup()
+  const ctx = { ...CTX, connectors: ['fake.read'] }
+  expect(await executor.call('fake.read', { q: 'hi' }, ctx, 'k1')).toMatchObject({ status: 'ok' })
+  expect(await executor.call('fake.send', { q: 'hi' }, ctx, 'k2')).toMatchObject({ status: 'refused' })
+  expect(calls).toHaveLength(1)
+})
+
+it('truncates a long tool name in the audit entry to 200 characters', async () => {
+  const { executor, audit } = setup()
+  await executor.call(`fake.${'x'.repeat(5000)}`, {}, CTX, 'k1')
+  const [entry] = audit.read()
+  expect(entry!.tool.length).toBeLessThanOrEqual(200)
+  expect(entry!.detail!.length).toBeLessThanOrEqual(200)
+})

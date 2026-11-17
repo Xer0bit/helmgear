@@ -7,7 +7,7 @@ it('ships its templates with the connectors and data class each is meant to have
   expect(templates.map(t => [t.name, t.connectors, t.dataClass])).toEqual([
     ['bookkeeping-proposal', [], 'sensitive'],
     ['competitor-brief', ['firecrawl'], 'public'],
-    ['email-triage', ['outbox'], 'sensitive'],
+    ['email-triage', ['outbox.draft'], 'sensitive'],
     ['outreach-research', ['firecrawl', 'outbox'], 'public'],
     ['social-post', ['firecrawl', 'outbox'], 'public'],
   ])

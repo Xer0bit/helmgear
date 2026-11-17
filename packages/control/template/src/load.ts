@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { TemplateError, type DataClass, type ReasoningEffort, type Template } from './types.ts'
 
 const NAME = /^[a-z0-9-]{1,48}$/
+const KEYS = ['persona', 'connectors', 'dataClass', 'reasoningEffort']
 const DATA_CLASSES: readonly string[] = ['public', 'sensitive'] satisfies DataClass[]
 const EFFORTS: readonly string[] = ['off', 'low', 'high', 'max'] satisfies ReasoningEffort[]
 
@@ -30,6 +31,8 @@ function loadOne(dir: string, folder: string): Template {
 
   const meta = isRecord(front.metadata) ? front.metadata.helmgear : undefined
   if (!isRecord(meta)) return fail('metadata.helmgear', 'must be a mapping')
+  // A misspelt key would otherwise fall back to a default without a word.
+  for (const key of Object.keys(meta)) if (!KEYS.includes(key)) fail(`metadata.helmgear.${key}`, `unknown key; expected one of ${KEYS.join(', ')}`)
   const persona = text(meta.persona, 'metadata.helmgear.persona')
   const connectors = meta.connectors
   if (!Array.isArray(connectors) || !connectors.every((c): c is string => typeof c === 'string' && c.length > 0)) {
@@ -51,8 +54,9 @@ function loadOne(dir: string, folder: string): Template {
 /** Load every `<root>/<name>/SKILL.md`, sorted by name. A malformed template throws; none is skipped. */
 export function loadTemplates(root: string): Template[] {
   const base = resolve(root)
-  return readdirSync(base, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
-    .map(entry => loadOne(join(base, entry.name), entry.name))
+  return readdirSync(base)
+    // statSync follows symlinks, so a linked template folder loads like any other.
+    .filter(name => statSync(join(base, name), { throwIfNoEntry: false })?.isDirectory())
+    .map(name => loadOne(join(base, name), name))
     .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 }

@@ -1,10 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Ajv, type ValidateFunction } from 'ajv'
 import { type AuditLog, payloadSha256 } from './audit.ts'
 import type { CallContext, CallResult, Connector, PendingRequest, ToolDef } from './registry.ts'
 
 const SAFE_KEY = /^[A-Za-z0-9_-]{1,128}$/
+// One dot exactly, so `<connector>.<action>` maps to the MCP name `<connector>__<action>` and back without ambiguity.
+const TOOL_NAME = /^[a-z0-9-]+\.[a-z0-9_-]+$/
 
 export interface ExecutorOptions {
   connectors: Connector[]
@@ -24,7 +26,9 @@ export class Executor {
     const ajv = new Ajv({ allErrors: true, strict: false })
     for (const connector of options.connectors) {
       for (const def of connector.tools) {
-        if (!def.name.startsWith(`${connector.name}.`)) throw new Error(`tool ${def.name} must be named ${connector.name}.<action>`)
+        if (!TOOL_NAME.test(def.name) || !def.name.startsWith(`${connector.name}.`)) {
+          throw new Error(`tool name ${def.name} must be ${connector.name}.<action> in lowercase letters, digits, - and _`)
+        }
         if (this.tools.has(def.name)) throw new Error(`duplicate tool: ${def.name}`)
         this.tools.set(def.name, { def, validate: ajv.compile(def.inputSchema) })
       }
@@ -35,6 +39,11 @@ export class Executor {
 
   /** The tool definition, for the approval queue to run an approved action. */
   tool(name: string): ToolDef | undefined { return this.tools.get(name)?.def }
+
+  /** Drop a cached result, so the same call is treated as new. Used when a pending action is resolved. */
+  forget(idempotencyKey: string): void {
+    if (SAFE_KEY.test(idempotencyKey)) rmSync(join(this.resultsDir, `${idempotencyKey}.json`), { force: true })
+  }
 
   /**
    * One tool call. The same `idempotencyKey` returns the first result without
@@ -55,13 +64,15 @@ export class Executor {
 
     const entry = this.tools.get(tool)
     const hash = payloadSha256(tool, input)
-    const record = { ...ctx, tool, tier: entry?.def.tier ?? 'read', actionId: key, payloadSha256: hash } as const
+    // The model chooses the tool name, so it is bounded before it is written anywhere.
+    const record = { tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, tool: tool.slice(0, 200), tier: entry?.def.tier ?? 'read', actionId: key, payloadSha256: hash } as const
     const refuse = (reason: string): CallResult => {
-      this.options.audit.append({ ...record, event: 'refused', detail: reason })
+      this.options.audit.append({ ...record, event: 'refused', detail: reason.slice(0, 200) })
       return { status: 'refused', reason }
     }
     if (!entry) return refuse(`unknown tool: ${tool}`)
-    if (ctx.connectors && !ctx.connectors.includes(tool.split('.')[0]!)) return refuse(`tool not available to this template: ${tool}`)
+    // A grant names whole connectors (`outbox`) or single tools (`outbox.draft`).
+    if (ctx.connectors && !ctx.connectors.includes(tool.split('.')[0]!) && !ctx.connectors.includes(tool)) return refuse(`tool not available to this template: ${tool}`)
     if (!entry.validate(input)) {
       return refuse(`invalid input: ${(entry.validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')}`)
     }

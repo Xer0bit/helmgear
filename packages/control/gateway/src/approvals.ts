@@ -22,7 +22,16 @@ export class ApprovalQueue {
   private readonly audit: AuditLog
   private readonly run: (action: PendingAction) => Promise<unknown>
 
-  constructor(options: { dir: string; audit: AuditLog; run: (action: PendingAction) => Promise<unknown> }) {
+  private readonly onResolved: ((actionId: string) => void) | undefined
+
+  constructor(options: {
+    dir: string
+    audit: AuditLog
+    run: (action: PendingAction) => Promise<unknown>
+    /** Called once an action stops being pending: after it executed, and after it was rejected. */
+    onResolved?: (actionId: string) => void
+  }) {
+    this.onResolved = options.onResolved
     this.dir = options.dir
     this.audit = options.audit
     this.run = options.run
@@ -57,6 +66,7 @@ export class ApprovalQueue {
   async approve(actionId: string, approver: string): Promise<ApprovalResult> {
     const gone: ApprovalResult = { status: 'refused', reason: `no pending action ${actionId}` }
     if (!SAFE_ID.test(actionId)) return gone
+    if (!approver.trim()) return { status: 'refused', reason: 'an approver is required' }
     const file = this.file(actionId)
     // Claim the action by renaming it: of two concurrent approvals, one rename fails.
     // ponytail: a crash while the send is running leaves a .running file that is neither
@@ -107,11 +117,13 @@ export class ApprovalQueue {
     }
     this.audit.append({ ...record, event: 'executed' })
     rmSync(claimed)
+    this.onResolved?.(actionId)
     return { status: 'executed', result }
   }
 
   reject(actionId: string, approver: string, reason?: string): void {
     const file = SAFE_ID.test(actionId) ? this.file(actionId) : undefined
+    if (!approver.trim()) throw new Error('an approver is required')
     if (!file || !existsSync(file)) throw new Error(`no pending action ${actionId}`)
     let action: Partial<PendingAction> = {}
     try { action = JSON.parse(readFileSync(file, 'utf8')) as PendingAction } catch { /* an unreadable action can still be rejected */ }
@@ -121,5 +133,6 @@ export class ApprovalQueue {
       tool: action.tool ?? '', tier: 'send', event: 'rejected', actionId, approver,
       payloadSha256: action.payloadSha256 ?? '', ...(reason ? { detail: reason } : {}),
     })
+    this.onResolved?.(actionId)
   }
 }

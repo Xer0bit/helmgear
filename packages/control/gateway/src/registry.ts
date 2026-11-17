@@ -5,7 +5,7 @@ export interface CallContext {
   tenant: string
   sessionId: string
   template: string
-  /** Connector names this template may use. Absent means every connector. */
+  /** Connectors (`outbox`) or single tools (`outbox.draft`) this template may use. Absent means every connector. */
   connectors?: string[]
 }
 

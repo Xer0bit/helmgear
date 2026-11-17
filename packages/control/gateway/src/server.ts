@@ -39,7 +39,7 @@ export async function startGateway(options: {
 
   const handler = createMcpHandler((request) => {
     const ctx = grants.get(fingerprint(bearer(request.requestInfo?.headers.get('authorization'))))
-    const tools = ctx ? options.connectors.filter(c => ctx.connectors.includes(c.name)).flatMap(c => c.tools) : []
+    const tools = ctx ? options.connectors.flatMap(c => c.tools.filter(tool => ctx.connectors.includes(c.name) || ctx.connectors.includes(tool.name))) : []
 
     const server = new Server({ name: 'helmgear-gateway', version: '0.0.1' }, { capabilities: { tools: {} } })
     server.setRequestHandler('tools/list', async () => ({

@@ -122,3 +122,10 @@ it('binds to 127.0.0.1', async () => {
   expect(new URL(server.url).hostname).toBe('127.0.0.1')
   expect(new URL(server.url).pathname).toBe('/mcp')
 })
+
+it('lists only the granted tool when the grant names one tool', async () => {
+  const { server } = await gateway()
+  const mcp = await client(server, ['alpha.read'])
+  expect((await mcp.listTools()).tools.map(t => t.name)).toEqual(['alpha__read'])
+  expect((await mcp.callTool({ name: 'alpha__send', arguments: { q: 'go' } })).isError).toBe(true)
+})

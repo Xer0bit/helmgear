@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it } from 'vitest'
@@ -80,4 +80,18 @@ it('returns templates sorted by name and ignores files that are not folders', ()
   write(dir, 'alpha', VALID)
   writeFileSync(join(dir, 'README.md'), 'not a template')
   expect(loadTemplates(dir).map(t => t.name)).toEqual(['alpha', 'zeta'])
+})
+
+it('rejects an unknown key under metadata.helmgear', () => {
+  const dir = root()
+  write(dir, 'a', { ...VALID, reasoningEfort: 'low' })
+  expect(failure(dir).field).toBe('metadata.helmgear.reasoningEfort')
+})
+
+it('loads a template whose folder is a symlink', () => {
+  const real = root()
+  write(real, 'alpha', VALID)
+  const dir = root()
+  symlinkSync(join(real, 'alpha'), join(dir, 'alpha'))
+  expect(loadTemplates(dir).map(t => t.name)).toEqual(['alpha'])
 })

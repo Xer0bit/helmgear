@@ -12,6 +12,8 @@ export function createCore(options: { connectors: Connector[]; stateDir: string 
   const approvals: ApprovalQueue = new ApprovalQueue({
     dir: join(options.stateDir, 'pending'),
     audit,
+    // A resolved action is forgotten, so the same call later is a new request and not a stale "queued".
+    onResolved: actionId => executor.forget(actionId),
     run: (action) => {
       const tool = executor.tool(action.tool)
       if (!tool) throw new Error(`unknown tool: ${action.tool}`)

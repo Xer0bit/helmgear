@@ -166,3 +166,28 @@ it('an unreadable pending file is refused, not stranded, and does not break list
   expect(existsSync(join(dir, 'a1.json'))).toBe(true)
   expect(existsSync(join(dir, 'a1.json.running'))).toBe(false)
 })
+
+it('refuses an empty approver on approve and on reject', async () => {
+  const { queue, ran } = setup()
+  queue.enqueue(ACTION)
+  expect(await queue.approve('a1', '  ')).toMatchObject({ status: 'refused' })
+  expect(() => queue.reject('a1', '')).toThrow(/approver/)
+  expect(ran).toHaveLength(0)
+  expect(queue.list()).toHaveLength(1)
+})
+
+it('forgets a cached pending result once the action is no longer pending', async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-core-'))
+  const core = createCore({
+    stateDir,
+    connectors: [{ name: 'fake', tools: [{ name: 'fake.send', description: 'send', tier: 'send', inputSchema: { type: 'object' }, run: async () => 'ok' }] }],
+  })
+  await core.executor.call('fake.send', INPUT, CTX, 'k1')
+  core.approvals.reject('k1', 'sam', 'no')
+  // The same call again is a new request, not a stale "queued" answer for a rejected action.
+  expect(await core.executor.call('fake.send', INPUT, CTX, 'k1')).toEqual({ status: 'pending', actionId: 'k1' })
+  expect(core.approvals.list().map(a => a.actionId)).toEqual(['k1'])
+  expect(await core.approvals.approve('k1', 'sam')).toMatchObject({ status: 'executed' })
+  expect(await core.executor.call('fake.send', INPUT, CTX, 'k1')).toEqual({ status: 'pending', actionId: 'k1' })
+  expect(core.approvals.list()).toHaveLength(1)
+})
