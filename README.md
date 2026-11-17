@@ -81,7 +81,7 @@ metadata:
 
 A `sensitive` template refuses to run on the provider `deepseek-official`, because that API stores request data in mainland China. Run those templates against another host of the model.
 
-Four templates ship: `social-post`, `outreach-research`, `email-triage` and `bookkeeping-proposal`.
+Six templates ship: `social-post`, `outreach-research`, `lead-finder`, `competitor-brief`, `email-triage` and `bookkeeping-proposal`.
 
 ## Connectors
 
@@ -91,6 +91,37 @@ Four templates ship: `social-post`, `outreach-research`, `email-triage` and `boo
 | `outbox` | `draft` (draft), `send` (send) | Writes JSON files. A stand-in for a real mail or publishing connector; nothing leaves the machine. |
 
 A connector is an object with a name and a list of tools (`name`, `description`, `inputSchema`, `tier`, `run`). Pass your own to `createCore` and `startGateway`.
+
+## The console
+
+```sh
+pnpm agent          # a terminal console: type a task, watch the agent work
+pnpm firecrawl:up   # start the self-hosted Firecrawl containers if web tools fail
+```
+
+The console shows which agent was picked, each tool call as the gateway records it, the reply, and whether the reply matches that record. `/help` lists its commands; `/status` shows which connectors are on.
+
+## Plan first
+
+```ts
+const planned = await runner.runTask({ tenant, request, mode: 'plan' })
+// { status: 'plan', plan: '...', sessionId, template }   nothing was done: the agent held no tools
+const result = await runner.runTask({ tenant, template: planned.template, request: 'Approved. Carry out the plan now.', continue: { sessionId: planned.sessionId } })
+```
+
+`continue` resumes a session, so a follow-up message or an approved plan runs with everything said so far. The console does this for you when `/plan` is on.
+
+## Real connectors
+
+| Connector | Turn it on | Tools |
+|---|---|---|
+| `email` | `SMTP_HOST`, `SMTP_FROM` (and `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`) in `.env` | `email.send`: one plain-text email to one recipient |
+| `x` | `X_ACCESS_TOKEN` in `.env` | `x.post`: one post, at most 280 characters |
+| any MCP server | an entry in `connectors.json` (copy `connectors.example.json`) | every tool that server offers |
+
+Every tool of these is held for approval, except MCP tools you mark `read` or `draft` in `connectors.json`. `mcpConnector` holds a tool by default because the gateway cannot know what a third-party tool does. A template uses a connector by naming it in `connectors`; a name with no connector behind it simply adds no tools. See `.env.example` for every setting.
+
+Each template also has a tool budget (`maxToolCalls`, default 12). The gateway counts the calls and refuses the rest, so a research task cannot run away.
 
 ## Checked replies
 

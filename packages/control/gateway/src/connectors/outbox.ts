@@ -27,7 +27,7 @@ export function outboxConnector(options: { dir: string }): Connector {
     name: 'outbox',
     tools: [
       { name: 'outbox.draft', description: 'Save a message as a draft for a person to review. Does not send.', inputSchema: MESSAGE, tier: 'draft', run: write('drafts') },
-      { name: 'outbox.send', description: 'Send a message. It is queued until a person approves it.', inputSchema: MESSAGE, tier: 'send', run: write('sent') },
+      { name: 'outbox.send', description: 'Send a message to an address. It is held until a person approves it. (Local stand-in: once approved it is written to a file on this machine.)', inputSchema: MESSAGE, tier: 'send', run: write('sent') },
     ],
   }
 }

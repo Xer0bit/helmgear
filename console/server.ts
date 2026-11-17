@@ -6,10 +6,11 @@
 // "Send" writes a file under tmp/console/outbox; nothing leaves the machine.
 import { readFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway } from '@helmgear/gateway'
+import { createCore, MemoryStore, startGateway } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
 import { createRunner } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
+import { connect } from './connectors.ts'
 
 const PORT = Number(process.env.PORT ?? 4317)
 const TENANT = 'console'
@@ -19,7 +20,8 @@ const EFFORTS = ['off', 'low', 'high', 'max']
 const firecrawlUrl = (process.env.FIRECRAWL_URL ?? 'http://127.0.0.1:3002').replace(/\/+$/, '')
 
 const memory = new MemoryStore(`${stateDir}/memory`)
-const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory })]
+const connected = await connect(stateDir, memory)
+const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
 const gateway = await startGateway({ executor: core.executor, connectors })
 const jevKey = process.env.TYPESAFE_API_KEY ?? ''

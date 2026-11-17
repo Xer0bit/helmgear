@@ -1,0 +1,16 @@
+[
+  {
+    "name": "linkedin",
+    "url": "https://example.com/your-linkedin-mcp-server/mcp",
+    "headers": { "Authorization": "Bearer ${LINKEDIN_MCP_TOKEN}" },
+    "tiers": { "get_profile": "read", "list_posts": "read" },
+    "defaultTier": "send"
+  },
+  {
+    "name": "accounting",
+    "url": "https://example.com/your-accounting-mcp-server/mcp",
+    "headers": { "Authorization": "Bearer ${ACCOUNTING_MCP_TOKEN}" },
+    "tiers": { "list_invoices": "read", "get_account": "read" },
+    "defaultTier": "send"
+  }
+]

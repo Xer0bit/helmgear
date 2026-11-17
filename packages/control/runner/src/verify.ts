@@ -8,7 +8,7 @@ export interface Verification { verified: boolean; problems: string[]; needsActi
 
 const STATEMENTS = {
   claimsSent: 'Does `reply` say that a message or post was sent, published, or queued for sending?',
-  claimsDraft: 'Does `reply` say that a draft was saved?',
+  claimsDraft: 'Does `reply` say that a draft was saved or stored somewhere, as opposed to the draft text simply being shown in the reply?',
   claimsDelivered: 'Does `reply` say that a message has already been delivered or published, rather than queued or waiting for approval?',
 }
 const CLAIMED = 0.7

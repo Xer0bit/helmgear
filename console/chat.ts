@@ -7,10 +7,11 @@
 // Anything that would leave the machine is held until you /approve it.
 // "Send" writes a file under tmp/console/outbox; nothing really goes out.
 import { createInterface } from 'node:readline'
-import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway, type PendingAction } from '@helmgear/gateway'
+import { createCore, MemoryStore, startGateway, type PendingAction } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
 import { createRunner, type TaskResult } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
+import { connect } from './connectors.ts'
 
 const TENANT = 'console'
 const stateDir = 'tmp/console'
@@ -61,7 +62,8 @@ function step(mark: string, text: string): void {
 
 // ---- the system under test
 const memory = new MemoryStore(`${stateDir}/memory`)
-const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory })]
+const connected = await connect(stateDir, memory)
+const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
 const gateway = await startGateway({ executor: core.executor, connectors })
 const jevKey = process.env.TYPESAFE_API_KEY ?? ''
@@ -77,6 +79,7 @@ let pendingPlan: { sessionId: string; template: string } | undefined
 const TOOL_WORDS: Record<string, string> = {
   'firecrawl.search': 'Searched the web', 'firecrawl.scrape': 'Read a web page', 'outbox.draft': 'Saved a draft',
   'outbox.send': 'Asked to send', 'memory.propose': 'Proposed something to remember',
+  'firecrawl.research': 'Researched the web', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
 }
 const waiting = (): PendingAction[] => core.approvals.list(TENANT)
 
@@ -242,6 +245,7 @@ async function status(): Promise<void> {
   if (!process.env.DEEPSEEK_API_KEY) say(red('  No DEEPSEEK_API_KEY in .env: agents cannot run.'))
   if (!jevKey) say(yellow('  No TYPESAFE_API_KEY in .env: choose an agent with /agent; replies are not checked.'))
   if (!firecrawl) say(yellow(`  Firecrawl is not answering at ${firecrawlUrl}: web tools will fail. Start it with: bash scripts/firecrawl-up.sh`))
+  for (const line of connected.lines) say(`  ${line.startsWith('on') ? green('on ') : dim('off')} ${line.startsWith('on') ? line.slice(5) : dim(line.slice(5))}`)
   say(dim(`  agent: ${settings.agent}   model: ${settings.model}   thinking: ${settings.thinking}   plan first: ${settings.plan ? 'on' : 'off'}   waiting: ${waiting().length}`))
 }
 
@@ -278,7 +282,8 @@ async function command(line: string): Promise<boolean> {
     case 'approve':
       for (const action of pick(argument)) {
         const outcome = await core.approvals.approve(action.actionId, 'console')
-        if (outcome.status === 'executed') say(`${green('✓')} Approved ${bold(action.tool)} ${dim(action.tool === 'memory.propose' ? 'and remembered.' : `and written to ${stateDir}/outbox/sent.`)}`)
+        const what = action.tool === 'memory.propose' ? 'and remembered.' : action.tool.startsWith('outbox.') ? `and written to ${stateDir}/outbox/sent (test stand-in; nothing left this machine).` : `and carried out for real: ${JSON.stringify(outcome.status === 'executed' ? outcome.result : null).slice(0, 160)}`
+        if (outcome.status === 'executed') say(`${green('✓')} Approved ${bold(action.tool)} ${dim(what)}`)
         else say(`${red('✗')} Not approved: ${outcome.reason}`)
       }
       break
@@ -341,5 +346,6 @@ for await (const raw of rl) {
 }
 rl.close()
 await gateway.close()
+await connected.close()
 say(dim('Bye.'))
 process.exit(0)

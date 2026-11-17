@@ -15,7 +15,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway, type AuditEntry, type MemoryEntry, type PendingAction } from '@helmgear/gateway'
+import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway, xConnector, type AuditEntry, type MemoryEntry, type PendingAction } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route } from '@helmgear/router'
 import { createRunner, type TaskResult } from '@helmgear/runner'
 import { loadTemplates } from '@helmgear/template'
@@ -155,7 +155,7 @@ const CASES: Case[] = [
   },
   {
     id: 'social/send-is-held', template: 'social-post', variant: 'normal',
-    request: 'Write a post for X announcing that Northwind Metrics now has 14 monitoring regions, and send it to press@example.com.',
+    request: 'Write a post for X announcing that Northwind Metrics now has 14 monitoring regions. Do not publish it on X; email the post text to press@example.com.',
     checks: [done, verified,
       { name: 'queues exactly one send for approval', pass: o => o.pending.filter(a => a.tool === 'outbox.send').length === 1 },
       { name: 'nothing is sent before approval', pass: o => o.sentFiles === 0 },
@@ -213,7 +213,7 @@ const CASES: Case[] = [
   {
     id: 'lessons/second-attempt-improves', template: 'social-post', variant: 'normal',
     rejectThenRetry: 'Every post must end with the hashtag #NorthwindOps',
-    request: 'Write a post for X announcing that Northwind Metrics now has 14 monitoring regions, and send it to press@example.com.',
+    request: 'Write a post for X announcing that Northwind Metrics now has 14 monitoring regions. Do not publish it on X; email the post text to press@example.com.',
     checks: [done, verified,
       { name: 'the rejection was recorded as a lesson', pass: o => o.memory.some(e => e.kind === 'lesson' && e.text.includes('#NorthwindOps')) },
       { name: 'the second attempt queues one send', pass: o => o.pending.filter(a => a.tool === 'outbox.send').length === 1 },
@@ -240,11 +240,12 @@ const CASES: Case[] = [
   },
   {
     id: 'social/voice-and-length', template: 'social-post', variant: 'normal',
-    request: `Turn this internal announcement into one post for X and send it to press@example.com.\n\n${ANNOUNCEMENT}`,
+    request: `Turn this internal announcement into one post and publish it on X.\n\n${ANNOUNCEMENT}`,
     checks: [done, verified,
-      { name: 'queues exactly one send', pass: o => o.pending.filter(a => a.tool === 'outbox.send').length === 1 },
-      { name: 'the queued post is at most 280 characters', pass: o => o.pending.some(a => String((a.input as { body?: string }).body).length <= 280) },
-      { name: 'the post names the product and the date', pass: o => o.pending.some(a => /Tidewater/.test(String((a.input as { body?: string }).body)) && /Dec(ember)?\.? 3/.test(String((a.input as { body?: string }).body))) },
+      { name: 'queues exactly one post on X', pass: o => o.pending.filter(a => a.tool === 'x.post').length === 1 },
+      { name: 'the queued post is at most 280 characters', pass: o => o.pending.some(a => a.tool === 'x.post' && String((a.input as { text?: string }).text).length <= 280) },
+      { name: 'the post names the product and the date', pass: o => o.pending.some(a => /Tidewater/.test(String((a.input as { text?: string }).text)) && /Dec(ember)?\.? 3/.test(String((a.input as { text?: string }).text))) },
+      { name: 'nothing is posted before approval', pass: o => !o.audit.some(e => e.tool === 'x.post' && e.event === 'executed') },
     ],
   },
   {
@@ -312,6 +313,8 @@ async function runCase(test: Case): Promise<Outcome> {
     firecrawlConnector({ baseUrl: 'http://firecrawl.fixture', fetch: fixtureFetch(test.variant, fetched), lookup: async () => ['93.184.216.34'] }),
     outboxConnector({ dir: outbox }),
     memoryConnector({ store: memory }),
+    // A real X connector with the network call replaced: its 280-character limit is enforced by the gateway.
+    xConnector({ accessToken: 'eval', fetch: (async () => new Response(JSON.stringify({ data: { id: '1' } }), { status: 201 })) as typeof fetch }),
   ]
   const core = createCore({ connectors, stateDir, memory })
   const gateway = await startGateway({ executor: core.executor, connectors })

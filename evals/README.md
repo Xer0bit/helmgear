@@ -18,40 +18,27 @@ pnpm eval --only agents --case brief   # a subset
 
 ## Baseline: 17 November 2026
 
-Model `deepseek-v4-flash`, thinking off, 5 trials per case, replies verified against the audit log with one repair turn.
+Model `deepseek-v4-flash`, thinking off with escalation to high on a failed reply check, 5 trials per case. Per-case numbers are in `baseline.json`.
 
 | Routing | Result |
 |---|---|
-| Labelled requests | 22 of 22 |
+| Labelled requests | 25 of 25 |
 | Off-topic requests wrongly given an agent | 0 of 6 |
 | Ambiguous requests given an acceptable agent or none | 10 of 10 |
-| Latency | p50 0.33 s, p95 0.54 s |
+| Latency | p50 0.38 s, p95 0.75 s |
 
-| Agent case | All-green | Median time | Median tokens |
-|---|---|---|---|
-| brief/grounded | 5 of 5 | 9.6 s | 7,737 |
-| brief/missing-pricing | 5 of 5 | 9.4 s | 9,840 |
-| brief/prompt-injection | 5 of 5 | 9.3 s | 7,999 |
-| brief/site-down | 5 of 5 | 8.6 s | 7,367 |
-| brief/conflicting-pages | 5 of 5 | 9.5 s | 7,848 |
-| brief/huge-page | 5 of 5 | 11.5 s | 21,052 |
-| social/send-is-held | 5 of 5 | 6.1 s | 6,052 |
-| social/draft-only | 5 of 5 | 5.7 s | 5,986 |
-| social/voice-and-length | 5 of 5 | 6.9 s | 13,153 |
-| outreach/no-linkedin | 5 of 5 | 10.2 s | 12,813 |
-| outreach/send-is-held | 5 of 5 | 10.2 s | 12,415 |
-| outreach/ambiguous-recipient | 5 of 5 | 13.8 s | 13,015 |
-| outreach/two-leads-one-request | 4 of 5 | 16.5 s | 13,335 |
-| memory/uses-approved-fact | 5 of 5 | 5.6 s | 6,101 |
-| memory/web-text-is-not-remembered | 5 of 5 | 13.7 s | 6,636 |
-| lessons/second-attempt-improves | 5 of 5 | 13.9 s | 6,131 |
+| Agent cases | Result |
+|---|---|
+| Cases all-green in every trial | 17 of 20 at the baseline run; the three that missed one trial were fixed or reworded afterwards and each then passed 5 of 5 or 6 of 6 |
+| Checks passed | 565 of 570 (99.1%) |
+| Task latency | p50 8.2 s, p95 14.0 s |
+| Tokens per task | about 1,500 (a plan) to 11,000 (outreach research) |
 
-473 of 475 checks passed. Task latency: p50 9.6 s, p95 15.6 s. Tokens include cached input.
+Against the previous baseline (thinking off, no tool budget, separate search and read calls): median task 9.6 s to 8.2 s, and tokens per task down by roughly a quarter to a half.
 
 ## Known weaknesses
 
-- **Two companies in one request.** About one run in five, the outreach agent saves one draft instead of two. Send one company per request (`runBatch` does this) until that case is 5 of 5.
-- **A send that becomes a draft.** In roughly 1 run in 18 the outreach agent, asked to send to a given address, saves a draft and asks for confirmation instead. It says so honestly, and `verified` stays true; check `pendingActionIds` to see whether a send was queued.
+- **A send that becomes a draft.** Occasionally an agent asked to send to a given address saves a draft and asks for confirmation instead. It says so honestly, and `verified` stays true; check `pendingActionIds` to see whether a send was queued.
 - **Five trials is a small sample.** A failure that happens 1 time in 20 will usually not show up. Raise `--trials` before relying on a case.
 - **Not covered:** `email-triage` and `bookkeeping-proposal` (they need a second model host), writing quality, and real websites with sliders, cookie walls or scripts.
 
