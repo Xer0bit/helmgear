@@ -347,7 +347,7 @@ async function pool<T, R>(items: T[], worker: (item: T) => Promise<R>): Promise<
   return results
 }
 const percentile = (values: number[], p: number): number => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0
-const report: Record<string, unknown> = { at: new Date().toISOString(), model: 'deepseek-v4-flash', reasoningEffort: 'off', trials: TRIALS }
+const report: Record<string, unknown> = { at: new Date().toISOString(), model: 'deepseek-v4-flash', reasoningEffort: 'per template', trials: TRIALS }
 let failed = false
 
 if (ONLY !== 'agents') {
@@ -381,7 +381,7 @@ if (ONLY !== 'routing') {
   const selected = CASES.filter(test => !CASE || test.id.includes(CASE))
   const jobs = selected.flatMap(test => Array.from({ length: TRIALS }, (_unused, trial) => ({ test, trial })))
   const outcomes = await pool(jobs, async ({ test, trial }) => ({ test, trial, outcome: await runCase(test) }))
-  console.log(`\n═══ Agent cases ═══  ${TRIALS} trials each, deepseek-v4-flash, thinking off`)
+  console.log(`\n═══ Agent cases ═══  ${TRIALS} trials each, deepseek-v4-flash, reasoning as each template sets it`)
   const summary = selected.map((test) => {
     const runs = outcomes.filter(o => o.test === test).map(o => o.outcome)
     const checks = test.checks.map(check => ({ name: check.name, passed: runs.filter(o => { try { return check.pass(o) } catch { return false } }).length }))

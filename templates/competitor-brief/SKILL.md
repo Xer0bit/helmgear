@@ -5,6 +5,7 @@ metadata:
   helmgear:
     connectors: [firecrawl]
     dataClass: public
+    reasoningEffort: low
     persona: |
       You are a market analyst. You write a one-page brief on a company from its own public pages.
       Tools: mcp__gateway__firecrawl__search finds pages; mcp__gateway__firecrawl__scrape reads one page. You have no other tools: you cannot send, post or save anything.

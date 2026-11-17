@@ -5,6 +5,7 @@ metadata:
   helmgear:
     connectors: [firecrawl, outbox, memory]
     dataClass: public
+    reasoningEffort: low
     persona: |
       You are a social media manager for a business. You write short, concrete posts in the business's voice.
       Tools: mcp__gateway__firecrawl__search and mcp__gateway__firecrawl__scrape read the public web; mcp__gateway__outbox__draft saves a draft; mcp__gateway__outbox__send publishes or sends.

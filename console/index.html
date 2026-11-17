@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helmgear console</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --sea: #e6edf1; --deck: #ffffff; --well: #f3f6f8; --ink: #15212d; --soft: #51606f; --line: #c8d3db;
+    --helm: #1d4b73; --helm-ink: #ffffff; --brass: #8f6410; --brass-wash: #f7edd4;
+    --go: #17694d; --go-wash: #dcf0e7; --stop: #a3271d; --stop-wash: #f8e0dc;
+    --ui: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+    --read: "Iowan Old Style", Charter, "Source Serif 4", Georgia, serif;
+    --code: ui-monospace, "Cascadia Code", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sea: #0f1a24; --deck: #17242f; --well: #1d2c39; --ink: #e7edf2; --soft: #9fb0bf; --line: #2f4354;
+      --helm: #7fb4e0; --helm-ink: #0d1820; --brass: #e0b45c; --brass-wash: #3a2f17;
+      --go: #6fcfa6; --go-wash: #173a2d; --stop: #f09a90; --stop-wash: #43201c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--sea); color: var(--ink); font: 15px/1.45 var(--ui); display: grid; grid-template-columns: 264px minmax(0, 1fr) 348px; }
+  h1, h2, h3, p { margin: 0; }
+  button, select, textarea, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--helm); outline-offset: 2px; }
+
+  /* left rail: which agent, with what settings */
+  .rail { background: var(--deck); border-right: 1px solid var(--line); padding: 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 22px; }
+  .brand { font-size: 21px; font-weight: 700; letter-spacing: -0.01em; }
+  .brand small { display: block; font-size: 13px; font-weight: 400; color: var(--soft); margin-top: 2px; }
+  .group > h2 { font-size: 13px; font-weight: 700; color: var(--soft); margin-bottom: 8px; }
+  .agents { display: grid; gap: 4px; }
+  .agent { text-align: left; width: 100%; background: none; border: 1px solid transparent; border-radius: 8px; padding: 8px 10px; }
+  .agent:hover { background: var(--well); }
+  .agent[aria-pressed="true"] { background: var(--well); border-color: var(--helm); }
+  .agent b { display: block; font-size: 14px; }
+  .agent span { display: block; font-size: 12.5px; color: var(--soft); line-height: 1.35; margin-top: 2px; }
+  .agent .tags { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag { font-size: 11.5px; padding: 1px 7px; border-radius: 99px; background: var(--sea); color: var(--soft); }
+  .tag.sensitive { background: var(--stop-wash); color: var(--stop); }
+  label.field { display: grid; gap: 4px; font-size: 13px; color: var(--soft); margin-bottom: 10px; }
+  select, input[type=text], textarea { background: var(--deck); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; }
+  .health { font-size: 12.5px; color: var(--soft); display: grid; gap: 3px; }
+  .health .bad { color: var(--stop); }
+
+  /* centre: the thread of runs */
+  .main { display: flex; flex-direction: column; min-height: 0; height: 100vh; }
+  .thread { flex: 1; overflow-y: auto; padding: 26px clamp(16px, 4vw, 44px) 12px; display: flex; flex-direction: column; gap: 26px; }
+  .empty { margin: auto; max-width: 520px; text-align: left; color: var(--soft); }
+  .empty h1 { color: var(--ink); font-size: 26px; letter-spacing: -0.015em; margin-bottom: 10px; }
+  .empty ul { padding-left: 0; list-style: none; display: grid; gap: 6px; margin: 16px 0 0; }
+  .empty button { background: var(--deck); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; text-align: left; width: 100%; }
+  .empty button:hover { border-color: var(--helm); }
+  .ask { align-self: flex-end; max-width: 78%; background: var(--helm); color: var(--helm-ink); padding: 10px 14px; border-radius: 14px 14px 3px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .runs { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+  .run { background: var(--deck); border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+  .run > header { padding: 10px 16px; border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; color: var(--soft); }
+  .run > header b { color: var(--ink); font-size: 14px; }
+
+  /* the track: what the agent did, in order */
+  .track { list-style: none; margin: 0; padding: 12px 16px 4px; display: grid; gap: 0; }
+  .track li { position: relative; padding: 0 0 12px 22px; font-size: 13.5px; }
+  .track li::before { content: ""; position: absolute; left: 4px; top: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--deck); border: 2px solid var(--soft); }
+  .track li::after { content: ""; position: absolute; left: 8px; top: 17px; bottom: -4px; width: 1px; background: var(--line); }
+  .track li:last-child::after { display: none; }
+  .track li.ok::before { border-color: var(--go); background: var(--go); }
+  .track li.held::before { border-color: var(--brass); background: var(--brass); border-radius: 2px; }
+  .track li.bad::before { border-color: var(--stop); background: var(--stop); }
+  .track li.live::before { border-color: var(--helm); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { background: var(--helm); } }
+  @media (prefers-reduced-motion: reduce) { .track li.live::before { animation: none; background: var(--helm); } }
+  .track code, .mono { font-family: var(--code); font-size: 12.5px; }
+  .track .note { color: var(--soft); }
+  .scores { margin: 6px 0 0; display: grid; gap: 3px; max-width: 420px; }
+  .score { display: grid; grid-template-columns: 150px 1fr 38px; gap: 8px; align-items: center; font-size: 12.5px; color: var(--soft); }
+  .score i { display: block; height: 6px; border-radius: 3px; background: var(--sea); overflow: hidden; }
+  .score i b { display: block; height: 100%; background: var(--helm); }
+
+  .reply { padding: 4px 18px 16px; font: 16px/1.6 var(--read); max-width: 74ch; overflow-wrap: anywhere; }
+  .reply > * + * { margin-top: 0.7em; }
+  .reply h1, .reply h2, .reply h3 { font-family: var(--ui); line-height: 1.25; letter-spacing: -0.01em; }
+  .reply h1 { font-size: 20px; } .reply h2 { font-size: 17px; } .reply h3 { font-size: 15px; }
+  .reply ul, .reply ol { padding-left: 1.3em; margin-bottom: 0; }
+  .reply blockquote { margin-left: 0; margin-right: 0; padding: 2px 0 2px 14px; border-left: 3px solid var(--line); color: var(--soft); }
+  .reply code { font-family: var(--code); font-size: 0.86em; background: var(--well); padding: 1px 4px; border-radius: 4px; }
+  .reply pre { background: var(--well); padding: 10px 12px; border-radius: 8px; overflow-x: auto; }
+  .reply pre code { background: none; padding: 0; }
+  .reply table { border-collapse: collapse; font: 14px/1.4 var(--ui); display: block; overflow-x: auto; }
+  .reply th, .reply td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+  .reply a { color: var(--helm); }
+  .verdict { margin: 0 16px 14px; padding: 9px 12px; border-radius: 8px; font-size: 13.5px; }
+  .verdict.ok { background: var(--go-wash); color: var(--go); }
+  .verdict.warn { background: var(--brass-wash); color: var(--brass); }
+  .verdict.bad { background: var(--stop-wash); color: var(--stop); }
+  .verdict ul { margin: 4px 0 0; padding-left: 1.2em; }
+
+  /* the gate: an action held for a person */
+  .gate { margin: 0 16px 14px; border: 1px solid var(--brass); border-left-width: 5px; border-radius: 8px; background: var(--brass-wash); padding: 12px 14px; }
+  .gate h3 { font-size: 14px; color: var(--brass); margin-bottom: 8px; }
+  .gate dl { margin: 0 0 10px; display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; font-size: 13.5px; }
+  .gate dt { color: var(--soft); }
+  .gate dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+  .gate .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .gate input { flex: 1; min-width: 160px; }
+  .gate .done { font-size: 13.5px; font-weight: 700; }
+  .btn { border: 1px solid var(--line); background: var(--deck); border-radius: 8px; padding: 7px 13px; font-weight: 700; }
+  .btn.primary { background: var(--helm); border-color: var(--helm); color: var(--helm-ink); }
+  .btn.approve { background: var(--go); border-color: var(--go); color: var(--deck); }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+
+  .composer { border-top: 1px solid var(--line); background: var(--deck); padding: 12px clamp(16px, 4vw, 44px) 16px; display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+  .composer textarea { resize: none; min-height: 48px; max-height: 220px; font-size: 15px; }
+  .composer p { grid-column: 1 / -1; font-size: 12.5px; color: var(--soft); }
+
+  /* right: what is waiting, what it knows, what was recorded */
+  .side { background: var(--deck); border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; height: 100vh; }
+  .tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; background: none; border: 0; border-bottom: 3px solid transparent; padding: 13px 6px 10px; font-weight: 700; color: var(--soft); }
+  .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--helm); }
+  .tabs .count { font-weight: 400; }
+  .panel { flex: 1; overflow-y: auto; padding: 14px; display: grid; gap: 10px; align-content: start; }
+  .panel .gate { margin: 0; }
+  .hint { font-size: 13px; color: var(--soft); }
+  .mem { border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 13.5px; display: grid; gap: 4px; }
+  .mem footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--soft); }
+  .mem button { background: none; border: 0; color: var(--stop); padding: 0; font-size: 12px; }
+  .addmem { display: grid; gap: 8px; }
+  .rec { font-size: 12.5px; border-bottom: 1px solid var(--line); padding-bottom: 7px; display: grid; gap: 1px; }
+  .rec .ev { font-weight: 700; }
+  .rec .ev.pending { color: var(--brass); } .rec .ev.executed, .rec .ev.approved { color: var(--go); } .rec .ev.refused, .rec .ev.failed, .rec .ev.rejected { color: var(--stop); }
+  .rec time { color: var(--soft); }
+
+  @media (max-width: 1080px) {
+    body { grid-template-columns: 1fr; height: auto; }
+    .rail, .side { border: 0; border-bottom: 1px solid var(--line); height: auto; }
+    .main { height: auto; min-height: 70vh; }
+    .side { height: 70vh; }
+  }
+</style>
+</head>
+<body>
+<aside class="rail" aria-label="Agent and settings">
+  <div class="brand">Helmgear<small>Test console, this machine only</small></div>
+  <div class="group">
+    <h2>Who handles the request</h2>
+    <div class="agents" id="agents"></div>
+  </div>
+  <div class="group">
+    <h2>Run it with</h2>
+    <label class="field">Model<select id="model"></select></label>
+    <label class="field">Thinking<select id="effort"></select></label>
+    <label class="field">Also run a second copy with<select id="compare"></select></label>
+  </div>
+  <div class="group">
+    <h2>Connections</h2>
+    <div class="health" id="health">Checking…</div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="thread" id="thread" aria-live="polite">
+    <div class="empty" id="empty">
+      <h1>Ask for some work and watch it happen.</h1>
+      <p>Each request is one task for one agent. You see which agent was picked, every tool call as it is recorded, and the reply checked against that record. Anything that would leave this machine stops at a gate until you approve it.</p>
+      <ul id="starters"></ul>
+    </div>
+  </div>
+  <form class="composer" id="composer">
+    <textarea id="request" rows="2" placeholder="Describe the task. Enter sends, Shift+Enter adds a line." aria-label="Request"></textarea>
+    <button class="btn primary" id="send" type="submit">Run task</button>
+    <p id="composer-note">Every message starts a fresh task; the agent does not see earlier messages. Sending writes a file here, never a real email or post.</p>
+  </form>
+</main>
+
+<aside class="side" aria-label="Approvals, memory and record">
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-waiting" aria-selected="true">Waiting <span class="count" id="count-waiting"></span></button>
+    <button role="tab" id="tab-memory" aria-selected="false">Memory <span class="count" id="count-memory"></span></button>
+    <button role="tab" id="tab-record" aria-selected="false">Record</button>
+  </div>
+  <div class="panel" id="panel"></div>
+</aside>
+
+<script>
+const $ = id => document.getElementById(id)
+const el = (tag, attrs = {}, ...children) => {
+  const node = document.createElement(tag)
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === 'class') node.className = value
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value)
+    else if (value !== false && value != null) node.setAttribute(key, value === true ? '' : value)
+  }
+  for (const child of children.flat()) if (child != null && child !== false) node.append(child)
+  return node
+}
+// replaceChildren does not flatten arrays; this does, and drops empty entries.
+const fill = (node, ...children) => node.replaceChildren(...children.flat(Infinity).filter(child => child != null && child !== false))
+const api = async (path, body) => {
+  const response = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : undefined)
+  const json = await response.json()
+  if (!response.ok) throw new Error(json.error || `Request failed (${response.status})`)
+  return json
+}
+
+// ---- Markdown, for model replies. The text is escaped first, so nothing the model writes can become markup.
+const escape = text => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+function inline(text) {
+  return text
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replace(/(^|[\s(])(https?:\/\/[^\s<)]+[^\s<).,;:])/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*\w])\*([^*\s][^*]*)\*(?!\w)/g, '$1<em>$2</em>')
+}
+function markdown(source) {
+  const lines = escape(source).split('\n')
+  const out = []
+  let i = 0
+  const cells = row => row.replace(/^\s*\||\|\s*$/g, '').split('|').map(c => inline(c.trim()))
+  while (i < lines.length) {
+    const line = lines[i]
+    if (/^```/.test(line)) {
+      const code = []
+      for (i++; i < lines.length && !/^```/.test(lines[i]); i++) code.push(lines[i])
+      i++
+      out.push(`<pre><code>${code.join('\n')}</code></pre>`)
+    } else if (/^#{1,6}\s/.test(line)) {
+      const level = Math.min(3, line.match(/^#+/)[0].length)
+      out.push(`<h${level}>${inline(line.replace(/^#+\s*/, ''))}</h${level}>`)
+      i++
+    } else if (/^\s*\|.*\|\s*$/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || '')) {
+      const head = cells(line)
+      const rows = []
+      for (i += 2; i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i]); i++) rows.push(cells(lines[i]))
+      out.push(`<table><thead><tr>${head.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`)
+    } else if (/^\s*(?:[-*]|\d+[.)])\s+/.test(line)) {
+      const ordered = /^\s*\d/.test(line)
+      const items = []
+      for (; i < lines.length && /^\s*(?:[-*]|\d+[.)])\s+/.test(lines[i]); i++) items.push(inline(lines[i].replace(/^\s*(?:[-*]|\d+[.)])\s+/, '')))
+      out.push(`<${ordered ? 'ol' : 'ul'}>${items.map(item => `<li>${item}</li>`).join('')}</${ordered ? 'ol' : 'ul'}>`)
+    } else if (/^&gt;\s?/.test(line)) {
+      const quote = []
+      for (; i < lines.length && /^&gt;\s?/.test(lines[i]); i++) quote.push(lines[i].replace(/^&gt;\s?/, ''))
+      out.push(`<blockquote>${markdown_inner(quote)}</blockquote>`)
+    } else if (/^\s*(?:---|\*\*\*)\s*$/.test(line)) {
+      out.push('<hr>'); i++
+    } else if (!line.trim()) {
+      i++
+    } else {
+      const para = []
+      for (; i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|&gt;|\s*(?:[-*]|\d+[.)])\s+|\s*\|)/.test(lines[i]); i++) para.push(lines[i])
+      out.push(`<p>${inline(para.join('\n')).replace(/\n/g, '<br>')}</p>`)
+    }
+  }
+  return out.join('')
+}
+const markdown_inner = lines => lines.join('\n').split(/\n{2,}/).map(block => `<p>${inline(block).replace(/\n/g, '<br>')}</p>`).join('')
+
+// ---- State
+let app = { templates: [], pending: [], memory: [], audit: [], health: {} }
+let chosen = 'auto'
+let tab = 'waiting'
+const STARTERS = [
+  'Write a short post for X announcing our new spring menu and send it to news@example.com.',
+  'Give me a brief on Plausible Analytics (plausible.io): what they sell and how they price it.',
+  'Research basecamp.com and draft a first-touch email introducing our scheduling tool.',
+  'What is the boiling point of water at the top of Mount Everest?',
+]
+const TOOL_WORDS = { 'firecrawl.search': 'Searched the web', 'firecrawl.scrape': 'Read a web page', 'outbox.draft': 'Saved a draft', 'outbox.send': 'Asked to send', 'memory.propose': 'Proposed something to remember' }
+const EVENT_WORDS = { executed: '', pending: 'held for your approval', refused: 'refused by the gateway', failed: 'failed' }
+
+async function refresh() {
+  app = await api('/api/state')
+  renderRail()
+  renderPanel()
+  // A held action shown in the thread may have been settled from the side panel.
+  const waiting = new Set(app.pending.map(action => action.actionId))
+  for (const node of document.querySelectorAll('#thread .gate[data-id]:not([data-settled])')) {
+    if (!waiting.has(node.dataset.id)) { node.dataset.settled = 'yes'; fill(node.querySelector('.row'), el('span', { class: 'done' }, 'Settled in the Waiting panel.')) }
+  }
+}
+
+function renderRail() {
+  const agents = $('agents')
+  fill(agents, 
+    el('button', { class: 'agent', type: 'button', 'aria-pressed': String(chosen === 'auto'), onclick: () => { chosen = 'auto'; renderRail() } },
+      el('b', {}, 'Pick for me'), el('span', {}, 'Jev reads the request and chooses an agent, or says none fits.')),
+    app.templates.map(t => el('button', { class: 'agent', type: 'button', 'aria-pressed': String(chosen === t.name), onclick: () => { chosen = t.name; renderRail() } },
+      el('b', {}, t.name), el('span', {}, t.description),
+      el('div', { class: 'tags' },
+        t.connectors.length ? t.connectors.map(c => el('span', { class: 'tag' }, c)) : el('span', { class: 'tag' }, 'no tools'),
+        t.dataClass === 'sensitive' && el('span', { class: 'tag sensitive', title: 'Refuses to run on DeepSeek’s own API. Needs a second model host.' }, 'sensitive: will refuse')))),
+  )
+  if (!$('model').options.length) {
+    fill($('model'), ...app.models.map(m => el('option', { value: m }, m)))
+    fill($('effort'), el('option', { value: '' }, 'As the agent sets it'), ...app.efforts.map(e => el('option', { value: e }, e === 'off' ? 'Off (fastest)' : e[0].toUpperCase() + e.slice(1))))
+    fill($('compare'), 
+      el('option', { value: '' }, 'Nothing, just one run'),
+      el('option', { value: 'effort:off' }, 'Thinking off'), el('option', { value: 'effort:low' }, 'Thinking low'), el('option', { value: 'effort:high' }, 'Thinking high'),
+      ...app.models.map(m => el('option', { value: `model:${m}` }, `Model ${m}`)))
+  }
+  const h = app.health
+  fill($('health'), 
+    el('div', { class: h.modelKey ? '' : 'bad' }, h.modelKey ? 'Model key found' : 'No DEEPSEEK_API_KEY in .env: agents cannot run'),
+    el('div', { class: h.jevKey ? '' : 'bad' }, h.jevKey ? 'Jev key found: routing and reply checks are on' : 'No TYPESAFE_API_KEY: pick an agent by hand; replies are not checked'),
+    el('div', { class: h.firecrawl ? '' : 'bad' }, h.firecrawl ? 'Firecrawl is answering' : `Firecrawl is not answering at ${h.firecrawlUrl}: web tools will fail`),
+  )
+}
+
+// ---- A held action, with approve and reject. Used in a run and in the Waiting tab.
+function gate(action, onResolved) {
+  const isMemory = action.tool === 'memory.propose'
+  const reason = el('input', { type: 'text', placeholder: 'Reason (optional; it becomes a lesson for this agent)', 'aria-label': 'Reason for rejecting' })
+  const row = el('div', { class: 'row' })
+  const settle = (text, color) => { box.dataset.settled = 'yes'; fill(row, el('span', { class: 'done', style: `color: var(--${color})` }, text)); onResolved && onResolved(); refresh() }
+  const approve = el('button', { class: 'btn approve', type: 'button' }, isMemory ? 'Remember this' : 'Approve and send')
+  const reject = el('button', { class: 'btn', type: 'button' }, 'Reject')
+  approve.addEventListener('click', async () => {
+    approve.disabled = reject.disabled = true
+    try {
+      const result = await api('/api/approve', { id: action.actionId })
+      if (result.status === 'executed') settle(isMemory ? 'Remembered.' : 'Approved. Written to the outbox on this machine.', 'go')
+      else settle(`Not approved: ${result.reason}`, 'stop')
+    } catch (error) { settle(`Could not approve: ${error.message}`, 'stop') }
+  })
+  reject.addEventListener('click', async () => {
+    approve.disabled = reject.disabled = true
+    try {
+      const result = await api('/api/reject', { id: action.actionId, reason: reason.value })
+      settle(result.lesson ? 'Rejected. Your reason is now a lesson for this agent.' : 'Rejected.', 'stop')
+    } catch (error) { settle(`Could not reject: ${error.message}`, 'stop') }
+  })
+  row.append(approve, reject, reason)
+  const box = el('div', { class: 'gate', 'data-id': action.actionId },
+    el('h3', {}, isMemory ? `${action.template} wants to remember this` : `${action.template} wants to send this`),
+    el('dl', {}, Object.entries(action.input).flatMap(([key, value]) => [el('dt', {}, key), el('dd', {}, typeof value === 'string' ? value : JSON.stringify(value))])),
+    row)
+  return box
+}
+
+function renderPanel() {
+  $('count-waiting').textContent = app.pending.length ? `(${app.pending.length})` : ''
+  $('count-memory').textContent = app.memory.length ? `(${app.memory.length})` : ''
+  for (const name of ['waiting', 'memory', 'record']) $(`tab-${name}`).setAttribute('aria-selected', String(tab === name))
+  const panel = $('panel')
+  if (tab === 'waiting') {
+    fill(panel, app.pending.length
+      ? app.pending.map(action => gate(action))
+      : el('p', { class: 'hint' }, 'Nothing is waiting. When an agent tries to send something or remember something, it stops here until you approve it.'))
+  } else if (tab === 'memory') {
+    const text = el('textarea', { rows: '2', placeholder: 'A lasting fact about the business, for example: Our product is called Tidewater.', 'aria-label': 'Fact to remember' })
+    const scope = el('select', { 'aria-label': 'Which agents see it' }, el('option', { value: '' }, 'Every agent'), app.templates.map(t => el('option', { value: t.name }, `Only ${t.name}`)))
+    const note = el('p', { class: 'hint' })
+    const add = el('button', { class: 'btn', type: 'button' }, 'Add to memory')
+    add.addEventListener('click', async () => {
+      try { await api('/api/memory', { text: text.value, template: scope.value }); await refresh() } catch (error) { note.textContent = error.message }
+    })
+    fill(panel, 
+      el('p', { class: 'hint' }, 'Agents read these before every task. Facts come from you or from a proposal you approved; lessons come from the reasons you give when rejecting.'),
+      app.memory.map(entry => el('div', { class: 'mem' }, el('div', {}, entry.text),
+        el('footer', {}, el('span', {}, `${entry.kind === 'lesson' ? 'Lesson' : 'Fact'}${entry.template ? `, ${entry.template} only` : ''}`),
+          el('button', { type: 'button', onclick: async () => { await api('/api/memory/remove', { id: entry.id }); refresh() } }, 'Remove')))),
+      el('div', { class: 'addmem' }, text, scope, add, note))
+  } else {
+    fill(panel, 
+      el('p', { class: 'hint' }, 'Every decision the gateway made, newest first. It stores a fingerprint of each payload, never the payload.'),
+      app.audit.length ? app.audit.map(entry => el('div', { class: 'rec' },
+        el('div', {}, el('span', { class: `ev ${entry.event}` }, entry.event), ' ', el('span', { class: 'mono' }, entry.tool)),
+        el('div', {}, `${entry.template}${entry.approver ? `, by ${entry.approver}` : ''}${entry.detail ? `: ${entry.detail}` : ''}`),
+        el('time', {}, new Date(entry.at).toLocaleString()))) : el('p', { class: 'hint' }, 'Nothing recorded yet.'))
+  }
+}
+
+// ---- One run
+function startRun(container, request, config) {
+  const head = el('header', {}, el('b', {}, 'Starting'), el('span', {}, config.label))
+  const track = el('ol', { class: 'track' })
+  const body = el('div')
+  container.append(el('article', { class: 'run' }, head, track, body))
+  const step = (cls, ...content) => { const li = el('li', { class: cls }, content); track.append(li); li.scrollIntoView({ block: 'nearest' }); return li }
+  let live = step('live', chosen === 'auto' ? 'Choosing an agent' : `Using ${chosen}`)
+  const settle = (cls, ...content) => { live.className = cls; fill(live, ...content); live = null }
+
+  const handlers = {
+    routed(data) {
+      if (data.chosenByYou) { settle('ok', `You chose `, el('b', {}, data.template)); head.firstChild.textContent = data.template }
+      else if (data.template) {
+        settle('ok', 'Jev chose ', el('b', {}, data.template), el('span', { class: 'note' }, ` in ${data.ms} ms`),
+          el('div', { class: 'scores' }, data.scores.map(s => el('div', { class: 'score' }, el('span', {}, s.label), el('i', {}, el('b', { style: `width:${Math.round(s.probability * 100)}%` })), el('span', {}, s.probability.toFixed(2))))))
+        head.firstChild.textContent = data.template
+      } else {
+        settle('bad', 'No agent fits this request', el('span', { class: 'note' }, ` (${data.reason}${data.noneFits != null ? `; chance none fits ${data.noneFits.toFixed(2)}` : ''})`),
+          data.scores.length ? el('div', { class: 'scores' }, data.scores.map(s => el('div', { class: 'score' }, el('span', {}, s.label), el('i', {}, el('b', { style: `width:${Math.round(s.probability * 100)}%` })), el('span', {}, s.probability.toFixed(2))))) : null)
+        head.firstChild.textContent = 'No agent'
+      }
+      if (data.template) live = step('live', 'Starting the agent')
+    },
+    started(data) {
+      if (live) settle('ok', 'Agent started', el('span', { class: 'note' }, ` on ${data.model}, thinking ${data.reasoningEffort}`))
+      live = step('live', 'Working')
+    },
+    action(data) {
+      const cls = data.event === 'executed' ? 'ok' : data.event === 'pending' ? 'held' : 'bad'
+      const li = el('li', { class: cls }, TOOL_WORDS[data.tool] || data.tool, ' ', el('code', {}, data.tool),
+        EVENT_WORDS[data.event] ? el('span', { class: 'note' }, `, ${EVENT_WORDS[data.event]}`) : null, data.detail ? el('span', { class: 'note' }, `: ${data.detail}`) : null)
+      if (live) track.insertBefore(li, live); else track.append(li)
+    },
+    async result(data) {
+      if (live) live.remove()
+      const seconds = `${data.seconds.toFixed(1)} s`
+      const tokens = data.usage ? `, ${(data.usage.inputTokens + data.usage.cachedInputTokens + data.usage.outputTokens).toLocaleString()} tokens` : ''
+      head.append(el('span', {}, `${seconds}${tokens}`))
+      if (data.status === 'done') {
+        step('ok', 'Replied')
+        const reply = el('div', { class: 'reply' })
+        reply.innerHTML = markdown(data.response || '(empty reply)')
+        body.append(reply)
+        body.append(data.verified
+          ? el('div', { class: 'verdict ok' }, 'Checked: the reply claims nothing the record does not show.')
+          : el('div', { class: `verdict ${data.problems.some(p => p.startsWith('not verified')) ? 'warn' : 'bad'}` },
+            data.problems.some(p => p.startsWith('not verified')) ? 'Not checked: no Jev key, so the reply was not compared with the record.' : 'The reply does not match what the agent did:',
+            data.problems.some(p => p.startsWith('not verified')) ? null : el('ul', {}, data.problems.map(p => el('li', {}, p)))))
+        await refresh()
+        for (const action of app.pending.filter(a => data.pendingActionIds.includes(a.actionId))) body.append(gate(action))
+      } else {
+        const words = { 'no-template': 'No agent ran. Pick one by hand on the left if you want to try anyway.', refused: 'Refused before starting', failed: 'The agent stopped with an error', error: 'Something went wrong' }
+        step('bad', words[data.status] || data.status)
+        if (data.status !== 'no-template') body.append(el('div', { class: 'verdict bad' }, data.reason))
+        refresh()
+      }
+    },
+  }
+
+  return (async () => {
+    try {
+      const response = await fetch('/api/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ request, template: chosen, model: config.model, reasoningEffort: config.effort }) })
+      if (!response.ok) throw new Error((await response.json()).error)
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        for (let end; (end = buffer.indexOf('\n\n')) >= 0;) {
+          const block = buffer.slice(0, end); buffer = buffer.slice(end + 2)
+          const event = /^event: (.+)$/m.exec(block)?.[1]
+          const data = /^data: (.+)$/m.exec(block)?.[1]
+          if (event && data && handlers[event]) await handlers[event](JSON.parse(data))
+        }
+      }
+    } catch (error) {
+      if (live) live.remove()
+      step('bad', 'Could not run')
+      body.append(el('div', { class: 'verdict bad' }, error.message))
+    }
+  })()
+}
+
+async function submit(text) {
+  const request = text.trim()
+  if (!request) return
+  $('empty')?.remove()
+  $('request').value = ''
+  const base = { model: $('model').value, effort: $('effort').value }
+  const configs = [{ ...base }]
+  const [kind, value] = $('compare').value.split(':')
+  if (kind === 'effort') configs.push({ ...base, effort: value })
+  if (kind === 'model') configs.push({ ...base, model: value })
+  for (const config of configs) config.label = `${config.model}, thinking ${config.effort || 'as the agent sets it'}`
+  const runs = el('div', { class: 'runs' })
+  $('thread').append(el('div', { class: 'ask' }, request), runs)
+  $('send').disabled = true
+  $('send').textContent = 'Running'
+  await Promise.all(configs.map(config => startRun(runs, request, config)))
+  $('send').disabled = false
+  $('send').textContent = 'Run task'
+  $('request').focus()
+}
+
+$('composer').addEventListener('submit', event => { event.preventDefault(); submit($('request').value) })
+$('request').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('composer').requestSubmit() } })
+for (const name of ['waiting', 'memory', 'record']) $(`tab-${name}`).addEventListener('click', () => { tab = name; renderPanel() })
+fill($('starters'), ...STARTERS.map(text => el('li', {}, el('button', { type: 'button', onclick: () => submit(text) }, text))))
+refresh().catch(error => { $('health').textContent = `Cannot reach the console server: ${error.message}` })
+</script>
+</body>
+</html>

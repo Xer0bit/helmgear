@@ -296,3 +296,13 @@ it('sums token usage over every turn of the run, including the repair turn', asy
   })
   expect(await runner.runTask({ tenant: 'acme', request: 'x' })).toMatchObject({ usage: { inputTokens: 2000, outputTokens: 55, cachedInputTokens: 300 } })
 })
+
+it('lets one task override the reasoning effort, and reports its session and template as soon as it starts', async () => {
+  const seen: { sessionId: string; template: string }[] = []
+  const { runner, started } = setup()
+  const result = await runner.runTask({ tenant: 'acme', request: 'draft a tweet', reasoningEffort: 'high', onStart: info => { seen.push(info) } }) as { sessionId: string }
+  expect(started[0]!.options.reasoningEffort).toBe('high')
+  expect(seen).toEqual([{ sessionId: result.sessionId, template: 'social-post' }])
+  await runner.runTask({ tenant: 'acme', request: 'draft a tweet' })
+  expect(started[1]!.options.reasoningEffort).toBe('low')
+})

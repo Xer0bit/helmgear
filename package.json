@@ -24,7 +24,10 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "try": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx scripts/try.ts",
     "outreach": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx examples/lead-outreach/outreach.ts",
-    "eval": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx evals/run.ts"
+    "eval": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx evals/run.ts",
+    "console": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx console/server.ts",
+    "agent": "TSX_TSCONFIG_PATH=tsconfig.base.json node --env-file=.env --import tsx console/chat.ts",
+    "firecrawl:up": "bash scripts/firecrawl-up.sh"
   },
   "devDependencies": {
     "@helmgear/tool-executor-native": "workspace:*",

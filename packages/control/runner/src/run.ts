@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { ApprovalQueue, AuditLog, MemoryStore } from '@helmgear/gateway'
 import { route, type Classifier, type Judge } from '@helmgear/router'
 import { Helmgear, RequestTimeoutError, TransportClosedError, type HelmgearOptions, type RunResult } from '@helmgear/sdk-client'
-import { loadTemplates } from '@helmgear/template'
+import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
 import { templatePatch } from './patch.ts'
 import { verifyReply, type ActionFact } from './verify.ts'
 
@@ -87,11 +87,22 @@ function turnError(result: RunResult): string {
   return 'the turn ended in an error'
 }
 
-export function createRunner(options: RunnerOptions): { runTask(input: { tenant: string; request: string; template?: string }): Promise<TaskResult> } {
+export interface TaskInput {
+  tenant: string
+  request: string
+  /** Name a template to skip routing. */
+  template?: string
+  /** Use this reasoning effort for this task instead of the template's. */
+  reasoningEffort?: ReasoningEffort
+  /** Called once the agent is about to start, before its first tool call. */
+  onStart?: (info: { sessionId: string; template: string }) => void
+}
+
+export function createRunner(options: RunnerOptions): { runTask(input: TaskInput): Promise<TaskResult> } {
   const factory = options.harnessFactory ?? (harnessOptions => new Helmgear(harnessOptions))
 
   return {
-    async runTask({ tenant, request, template: named }) {
+    async runTask({ tenant, request, template: named, reasoningEffort, onStart }) {
       if (!TENANT.test(tenant)) return { status: 'refused', reason: 'tenant must match [a-z0-9][a-z0-9_-]{0,63}' }
       const templates = loadTemplates(options.templatesDir)
 
@@ -125,9 +136,10 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
           cwd: join(home, 'work'),
           provider: options.model.provider,
           model: options.model.model,
-          reasoningEffort: template.reasoningEffort as NonNullable<HelmgearOptions['reasoningEffort']>,
+          reasoningEffort: (reasoningEffort ?? template.reasoningEffort) as NonNullable<HelmgearOptions['reasoningEffort']>,
           env: { ...base, HELMGEAR_GATEWAY_TOKEN: token },
         })
+        onStart?.({ sessionId, template: template.name })
         const timeoutMs = options.timeoutMs ?? 300_000
         const expired = new Promise<never>((_resolve, reject) => {
           deadline = setTimeout(() => reject(new RunnerError('HARNESS_TIMEOUT', `run exceeded ${timeoutMs} ms`)), timeoutMs)

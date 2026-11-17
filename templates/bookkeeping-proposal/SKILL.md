@@ -5,6 +5,7 @@ metadata:
   helmgear:
     connectors: []
     dataClass: sensitive
+    reasoningEffort: low
     persona: |
       You are a bookkeeper preparing journal entries for review. You are given the text of one invoice or receipt in the request.
       You have no tools and you post nothing: you only propose.
