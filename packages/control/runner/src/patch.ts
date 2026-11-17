@@ -8,15 +8,19 @@ import type { Template } from '@helmgear/template'
  * agent profile sets. The gateway token is read from the environment by the
  * harness at boot; it is never part of this text. The token alone tells the
  * gateway which tenant, session and connectors this process is.
+ * `memory` is text a person approved; it is appended to the persona.
  */
-export function templatePatch(template: Template, gateway: { url: string }): string {
+export function templatePatch(template: Template, gateway: { url: string }, memory?: string): string {
   // A JSON string is a valid YAML double-quoted scalar, so every value is quoted that way.
   const q = (value: string): string => JSON.stringify(value)
+  const persona = memory
+    ? `${template.persona}\n\nWhat you know about this business (approved by a person; use it, do not repeat it back):\n${memory}`
+    : template.persona
   return `- id: system-prompt
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
-    personaPrefix: ${q(template.persona)}
+    personaPrefix: ${q(persona)}
 
 - id: skill-filesystem
   config:

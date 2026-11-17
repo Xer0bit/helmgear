@@ -2,7 +2,7 @@
 //   pnpm try "Draft a post about our new invoice feature and send it to press@example.com"
 //   pnpm try --approve "..."        also approve whatever the agent queued
 //   pnpm try --template social-post "..."   skip routing
-import { createCore, firecrawlConnector, outboxConnector, startGateway } from '@helmgear/gateway'
+import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway } from '@helmgear/gateway'
 import { jevClassifier } from '@helmgear/router'
 import { createRunner } from '@helmgear/runner'
 
@@ -14,7 +14,8 @@ const request = args.filter((arg, i) => !arg.startsWith('--') && (at < 0 || i !=
 if (!request) { console.error('usage: pnpm try [--approve] [--template <name>] "<request>"'); process.exit(2) }
 
 const stateDir = 'tmp/state'
-const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` })]
+const memory = new MemoryStore(`${stateDir}/memory`)
+const connectors = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory })]
 const core = createCore({ connectors, stateDir })
 const gateway = await startGateway({ executor: core.executor, connectors })
 try {
@@ -23,6 +24,7 @@ try {
     gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
     classifier: jevClassifier({ apiKey: process.env.TYPESAFE_API_KEY ?? '' }),
     model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    memory,
   })
   const started = Date.now()
   const result = await runner.runTask({ tenant: 'demo', request, ...(template ? { template } : {}) })

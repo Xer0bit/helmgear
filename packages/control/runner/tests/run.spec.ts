@@ -274,3 +274,11 @@ it('tells the agent not to call a tool again when the action exists and only the
   expect(prompts[1]).toMatch(/Do not call any tool/)
   expect(prompts[1]).not.toMatch(/make the tool call now/)
 })
+
+it("passes the tenant's rendered memory for the chosen template into the patch", async () => {
+  const asked: [string, string | undefined][] = []
+  const { runner, started } = setup({ memory: { render: (tenant, template) => { asked.push([tenant, template]); return '- Our product is called Tidewater.' } } })
+  await runner.runTask({ tenant: 'acme', request: 'draft a tweet' })
+  expect(asked).toEqual([['acme', 'social-post']])
+  expect(started[0]!.patch).toContain('Our product is called Tidewater.')
+})

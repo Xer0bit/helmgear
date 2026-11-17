@@ -42,3 +42,30 @@ it('never contains the token value', () => {
   process.env.HELMGEAR_GATEWAY_TOKEN = TOKEN
   try { expect(parsed().text).not.toContain(TOKEN) } finally { delete process.env.HELMGEAR_GATEWAY_TOKEN }
 })
+
+function persona(memory?: string): string {
+  const text = templatePatch(TEMPLATE, { url: 'http://127.0.0.1:4555/mcp' }, memory)
+  const rows = parse(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (source: string) => ({ js: source }) }] }) as Record<string, any>[]
+  return rows.find(r => r.id === 'system-prompt')!.config.personaPrefix
+}
+
+it('appends approved memory to the persona', () => {
+  const text = persona('- Our product is called Tidewater.\n- We never use exclamation marks.')
+  expect(text.startsWith(TEMPLATE.persona)).toBe(true)
+  expect(text).toContain('What you know about this business')
+  expect(text.endsWith('- Our product is called Tidewater.\n- We never use exclamation marks.')).toBe(true)
+})
+
+it('leaves the persona unchanged without memory', () => {
+  expect(persona()).toBe(TEMPLATE.persona)
+  expect(persona('')).toBe(TEMPLATE.persona)
+})
+
+it('memory text cannot break out of the YAML scalar', () => {
+  const hostile = '- "quoted" and a\nnewline: !!js process.exit(1)\n- id: evil'
+  const text = templatePatch(TEMPLATE, { url: 'http://127.0.0.1:4555/mcp' }, hostile)
+  const rows = parse(text, { customTags: [{ tag: 'tag:yaml.org,2002:js', resolve: (source: string) => ({ js: source }) }] }) as Record<string, any>[]
+  expect(rows).toHaveLength(3)
+  expect(rows.find(r => r.id === 'system-prompt')!.config.personaPrefix.endsWith(hostile)).toBe(true)
+  expect(JSON.stringify(rows).match(/"js"/g)).toHaveLength(1)
+})

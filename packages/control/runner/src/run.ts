@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { ApprovalQueue, AuditLog } from '@helmgear/gateway'
+import type { ApprovalQueue, AuditLog, MemoryStore } from '@helmgear/gateway'
 import { route, type Classifier, type Judge } from '@helmgear/router'
 import { Helmgear, RequestTimeoutError, TransportClosedError, type HelmgearOptions, type RunResult } from '@helmgear/sdk-client'
 import { loadTemplates } from '@helmgear/template'
@@ -37,6 +37,8 @@ export interface RunnerOptions {
   env?: NodeJS.ProcessEnv
   /** Deadline for one whole run. Default 300,000 ms. */
   timeoutMs?: number
+  /** What this tenant's agents know between runs; rendered into the persona. */
+  memory?: Pick<MemoryStore, 'render'>
   /** Reads each reply so it can be checked against the audit log. Without one, results are returned unverified. */
   judge?: Judge
   /** Give the agent one turn to fix a reply that does not match what it did. Default true when `judge` is set. */
@@ -112,7 +114,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: { tenant:
       let harness: HarnessLike | undefined
       let deadline: NodeJS.Timeout | undefined
       try {
-        writeFileSync(patchFile, templatePatch(template, options.gateway), { mode: 0o600 })
+        writeFileSync(patchFile, templatePatch(template, options.gateway, options.memory?.render(tenant, template.name)), { mode: 0o600 })
         const base = options.env ?? Object.fromEntries(PASSED_ENV.flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
         harness = factory({
           profile: 'agent',

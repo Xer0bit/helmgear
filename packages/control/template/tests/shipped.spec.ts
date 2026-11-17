@@ -8,8 +8,8 @@ it('ships its templates with the connectors and data class each is meant to have
     ['bookkeeping-proposal', [], 'sensitive'],
     ['competitor-brief', ['firecrawl'], 'public'],
     ['email-triage', ['outbox.draft'], 'sensitive'],
-    ['outreach-research', ['firecrawl', 'outbox'], 'public'],
-    ['social-post', ['firecrawl', 'outbox'], 'public'],
+    ['outreach-research', ['firecrawl', 'outbox', 'memory'], 'public'],
+    ['social-post', ['firecrawl', 'outbox', 'memory'], 'public'],
   ])
   for (const template of templates) {
     expect(template.persona, template.name).toMatch(/untrusted/i)
