@@ -926,6 +926,8 @@ importers:
         specifier: ^2.4.2
         version: 2.9.0
 
+  packages/control/scheduler: {}
+
   packages/control/template:
     dependencies:
       yaml:

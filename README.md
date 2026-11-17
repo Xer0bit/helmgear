@@ -92,6 +92,60 @@ Four templates ship: `social-post`, `outreach-research`, `email-triage` and `boo
 
 A connector is an object with a name and a list of tools (`name`, `description`, `inputSchema`, `tier`, `run`). Pass your own to `createCore` and `startGateway`.
 
+## Checked replies
+
+An agent can say it did something it did not do. Give the runner a judge and it compares each reply with the audit log:
+
+```ts
+import { jevJudge } from '@helmgear/router'
+const runner = createRunner({ /* ... */, judge: jevJudge({ apiKey: process.env.TYPESAFE_API_KEY! }) })
+const result = await runner.runTask({ tenant: 'acme', request: '...' })
+// result.actions   what the gateway recorded for this run: trust this
+// result.verified  true only when the reply claims nothing the record does not support
+// result.problems  what did not match
+```
+
+When they disagree, the agent gets one turn to fix the reply or make the missing tool call. Without a judge, `verified` is `false`.
+
+## Memory and lessons
+
+```ts
+import { memoryConnector, MemoryStore } from '@helmgear/gateway'
+const memory = new MemoryStore(`${stateDir}/memory`)
+const connectors = [/* ... */, memoryConnector({ store: memory })]
+const core = createCore({ connectors, stateDir, memory })
+const runner = createRunner({ /* ... */, memory })
+
+memory.add('acme', { kind: 'fact', text: 'Our product is called Tidewater.', source: 'person' })
+```
+
+- **Facts.** A template that lists `memory` in its connectors can propose a fact with `memory.propose`. The proposal waits in the approval queue like a send, so text an agent read on a web page cannot become memory unless you approve it.
+- **Lessons.** When you reject an action with a reason, the reason is stored for that tenant and template, and later runs see it.
+- Both are added to the agent's instructions, newest first, up to 2,000 characters.
+
+## Many tasks, and scheduled tasks
+
+```ts
+import { runBatch } from '@helmgear/runner'
+const results = await runBatch(runner, items, { concurrency: 4 })   // input order; a failure does not stop the rest
+
+import { Scheduler } from '@helmgear/scheduler'
+const scheduler = new Scheduler({ file: `${stateDir}/jobs.json`, run: job => runner.runTask(job) })
+scheduler.add({ tenant: 'acme', template: 'competitor-brief', request: '...', when: { dailyAt: '08:00' } })
+setInterval(() => scheduler.tick(), 30_000)
+```
+
+A job runs at most once per slot: each `everyMinutes` period, or each UTC day after `dailyAt`. The slot is recorded before the job starts, so a restart does not run it twice. Your application owns the timer; run one scheduler per file. A send from a scheduled run still waits for approval.
+
+## Evaluate
+
+```sh
+pnpm eval                  # routing accuracy and agent cases against a fictional company
+pnpm eval --trials 5 --gate   # fail if results are worse than evals/baseline.json
+```
+
+See `evals/README.md` for the cases and the latest numbers.
+
 ## Develop
 
 ```sh
