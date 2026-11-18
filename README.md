@@ -1,4 +1,14 @@
-# Helmgear
+<p align="center">
+  <img src="assets/icon.svg" width="112" height="112" alt="Helmgear logo: a ship's wheel with gear teeth">
+</p>
+
+<h1 align="center">Helmgear</h1>
+
+<p align="center">
+  <a href="https://github.com/Xer0bit/helmgear/actions/workflows/ci.yml"><img src="https://github.com/Xer0bit/helmgear/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A524.9-brightgreen" alt="Node 24.9 or later">
+</p>
 
 Helmgear is an agent harness for business tasks. Your application hands it a request; it picks an agent template, runs that agent with only the tools the template allows, and holds every action that leaves the system until a person approves it.
 
@@ -23,6 +33,8 @@ request ──> router (Jev) ──> template ──> agent (model loop, no shel
 Requires Node 24.9 or later and pnpm.
 
 ```sh
+git clone https://github.com/Xer0bit/helmgear.git
+cd helmgear
 pnpm install
 printf 'DEEPSEEK_API_KEY=...\nTYPESAFE_API_KEY=...\n' > .env   # git-ignored
 ```
@@ -187,6 +199,10 @@ pnpm test:e2e      # live tests; each skips itself when its key is missing
 
 The control plane lives in `packages/control/` (`template`, `gateway`, `router`, `runner`). The model loop underneath is the `agent` profile in `packages/bundle/agent/`.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Release history is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Licence
 
-[MIT](LICENSE). Helmgear is a fork of DeepSeek Harness; the original copyright notice is kept in `LICENSE`. Third-party dependencies and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE). Helmgear is the original copyright notice is kept in `LICENSE`. Third-party dependencies and their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

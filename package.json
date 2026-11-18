@@ -1,6 +1,14 @@
 {
   "name": "helmgear",
   "version": "0.2.2-rc.3",
+  "description": "An agent harness for business tasks, where every outgoing action waits for a person's approval.",
+  "keywords": ["ai-agents", "agent-harness", "mcp", "human-in-the-loop", "llm"],
+  "homepage": "https://github.com/Xer0bit/helmgear#readme",
+  "bugs": "https://github.com/Xer0bit/helmgear/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xer0bit/helmgear.git"
+  },
   "license": "MIT",
   "private": true,
   "type": "module",
