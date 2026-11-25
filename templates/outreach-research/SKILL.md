@@ -4,6 +4,7 @@ description: Researches one named company from its public web pages and writes a
 metadata:
   helmgear:
     connectors: [firecrawl, email, outbox, memory, kb, jev]
+    requires: [email, firecrawl]
     dataClass: public
     maxToolCalls: 6
     persona: |

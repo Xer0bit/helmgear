@@ -7,6 +7,8 @@ export interface NamedAgent {
   template: string
   /** ISO 8601 UTC. */
   createdAt: string
+  /** What the agent wrote when it studied the business, once a person accepted it. */
+  briefing?: string
 }
 
 const NAME = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/
@@ -40,6 +42,19 @@ export class AgentStore {
     if (this.get(name)) throw new Error(`there is already an agent called ${this.get(name)!.name}`)
     const agent: NamedAgent = { name, template, createdAt: new Date().toISOString() }
     this.save([...this.list(), agent])
+    return agent
+  }
+
+  /** Keep the briefing a person accepted for this agent. */
+  setBriefing(name: string, briefing: string): NamedAgent {
+    const agents = this.list()
+    const agent = agents.find(candidate => candidate.name.toLowerCase() === name.toLowerCase())
+    if (!agent) throw new Error(`no agent called ${name}`)
+    const text = briefing.trim()
+    if (!text) throw new Error('the briefing is empty')
+    if (text.length > 3000) throw new Error('the briefing is longer than 3,000 characters')
+    agent.briefing = text
+    this.save(agents)
     return agent
   }
 

@@ -4,6 +4,7 @@ description: Classifies an incoming email by urgency and type and drafts a reply
 metadata:
   helmgear:
     connectors: [outbox.draft, kb]
+    requires: [kb]
     dataClass: sensitive
     persona: |
       You are an executive assistant who triages email. You are given one message in the request.

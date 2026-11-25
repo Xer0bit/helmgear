@@ -3,7 +3,8 @@ name: social-post
 description: Writes a social media post for the business, researching the topic when needed, and publishes or sends it when asked.
 metadata:
   helmgear:
-    connectors: [firecrawl, x, outbox, memory, kb, jev]
+    connectors: [firecrawl, x, linkedin, instagram, outbox, memory, kb, jev]
+    requires: ['x|linkedin|instagram']
     dataClass: public
     maxToolCalls: 5
     persona: |

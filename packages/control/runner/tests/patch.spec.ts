@@ -4,7 +4,7 @@ import { parse } from 'yaml'
 import { templatePatch, type ToolInfo } from '../src/index.ts'
 
 const TEMPLATE: Template = {
-  name: 'social-post', description: 'Drafts posts.', connectors: ['firecrawl', 'outbox'], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12,
+  name: 'social-post', description: 'Drafts posts.', connectors: ['firecrawl', 'outbox'], requires: [], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12,
   persona: 'You are "Sam": a social media manager.\nNever send without approval. #1 rule: {be: careful}',
   dir: '/srv/templates/social-post',
 }

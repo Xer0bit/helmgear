@@ -39,14 +39,14 @@ const RULES = `Rules for every task:
 export function templatePatch(
   template: Template,
   gateway: { url: string },
-  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined; agentName?: string | undefined; model?: { provider: string; model: string; host?: ModelHost | undefined } | undefined } = {},
+  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined; agentName?: string | undefined; briefing?: string | undefined; model?: { provider: string; model: string; host?: ModelHost | undefined } | undefined } = {},
 ): string {
   // A JSON string is a valid YAML double-quoted scalar, so every value is quoted that way.
   const q = (value: string): string => JSON.stringify(value)
   const sections = [template.persona.trim(), RULES]
   // A named agent has one job for good. Nothing routes around it, so it has to turn down other work itself.
   if (extras.agentName) {
-    sections.unshift(`Your name is ${extras.agentName}. You have one job: ${template.description.trim()}\nIf a request is not part of that job, do not attempt it and call no tool: say in one line that it is outside your job and what you do instead. A follow-up about work you already did is part of your job.`)
+    sections.unshift(`Your name is ${extras.agentName}. You have one job: ${template.description.trim()}\nIf a request is not part of that job, do not attempt it and call no tool: say in one line that it is outside your job and what you do instead. A follow-up about work you already did is part of your job, and so is studying the business when you are asked to.`)
   }
   if (extras.tools) {
     sections.push(extras.tools.length === 0
@@ -54,6 +54,7 @@ export function templatePatch(
       : `${extras.planning ? 'Your tools (you can use them only after the plan is approved):' : 'Your tools:'}\n${extras.tools
         .map(tool => `- ${tool.name} (${tool.tier === 'send' ? 'held for approval' : 'runs at once'}): ${tool.description}`).join('\n')}`)
   }
+  if (extras.briefing) sections.push(`What you learned when you studied this business (a person approved these notes; rely on them and look up details in the knowledge base):\n${extras.briefing}`)
   if (extras.memory) sections.push(`What you know about this business (approved by a person; use it, do not repeat it back):\n${extras.memory}`)
   const { model } = extras
   // ponytail: a hosted model is declared without thinking levels, because each host spells them

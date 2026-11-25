@@ -4,6 +4,7 @@ description: Reads a competitor's public website and writes a short brief on wha
 metadata:
   helmgear:
     connectors: [firecrawl, kb]
+    requires: [firecrawl]
     dataClass: public
     maxToolCalls: 5
     persona: |

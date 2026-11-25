@@ -11,7 +11,7 @@ import { basename } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createCore, MemoryStore, startGateway, type PendingAction } from '@helmgear/gateway'
 import { jevJudge, type Classifier } from '@helmgear/router'
-import { AgentStore, createRunner, modelHostFromEnv, type RunnerOptions, type TaskResult } from '@helmgear/runner'
+import { AgentStore, createRunner, missingConnectors, modelHostFromEnv, type RunnerOptions, type TaskResult } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
 import { EXTRACTABLE, extractText, KnowledgeBase, teiEmbedder, teiReranker } from '@helmgear/knowledge'
 import { connect } from './connectors.ts'
@@ -85,11 +85,22 @@ const settings: { agent: string | undefined; model: string; thinking: ReasoningE
 const threads = new Map<string, string>()
 /** A plan an agent proposed and is waiting to hear about. */
 let pendingPlan: { sessionId: string; agent: string } | undefined
+/** A briefing an agent wrote after studying, waiting for you to accept it. */
+let pendingBriefing: { agent: string; text: string } | undefined
+
+/** What still stands between an agent and its first task. Empty when it is ready. */
+function setupSteps(agent: { name: string; template: string; briefing?: string }): string[] {
+  const template = loadTemplates('templates').find(t => t.name === agent.template)
+  const steps = template ? missingConnectors(template, gateway.describe).map(need => `connect ${need} (see /status for how)`) : [`its template "${agent.template}" no longer exists`]
+  if (kb.list(TENANT).length === 0) steps.push('add what the business is to the knowledge base: /kb add <file or URL>')
+  if (!agent.briefing) steps.push('let it study the business: /study')
+  return steps
+}
 
 const TOOL_WORDS: Record<string, string> = {
   'firecrawl.search': 'Searched the web', 'firecrawl.scrape': 'Read a web page', 'outbox.draft': 'Saved a draft',
   'outbox.send': 'Asked to send', 'memory.propose': 'Proposed something to remember',
-  'jev.judge': 'Asked Jev for a judgement', 'jev.pick': 'Asked Jev to pick', 'firecrawl.research': 'Researched the web', 'kb.search': 'Searched the knowledge base', 'kb.read': 'Read a knowledge-base document', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
+  'jev.judge': 'Asked Jev for a judgement', 'jev.pick': 'Asked Jev to pick', 'firecrawl.research': 'Researched the web', 'kb.list': 'Listed the knowledge base', 'kb.search': 'Searched the knowledge base', 'kb.read': 'Read a knowledge-base document', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
 }
 const waiting = (): PendingAction[] => core.approvals.list(TENANT)
 
@@ -111,7 +122,7 @@ function showWaiting(only?: string[]): void {
 }
 
 /** Run one message. `approved` means: carry out the plan the agent proposed last. */
-async function runTask(request: string, approved = false): Promise<void> {
+async function runTask(request: string, approved = false, studying = false): Promise<void> {
   const templates = loadTemplates('templates')
   const started = Date.now()
   let template: string | undefined
@@ -125,11 +136,19 @@ async function runTask(request: string, approved = false): Promise<void> {
   }
   if (!templates.some(t => t.name === agent.template)) throw new Error(`${agent.name}'s template "${agent.template}" no longer exists. Remove the agent and create it again.`)
   template = agent.template
+  // An agent does not work for a business it has not studied, or without the accounts its job needs.
+  const steps = setupSteps(agent).filter(step => !(studying && step.startsWith('let it study')))
+  if (steps.length > 0) {
+    say(`${yellow('●')} ${bold(agent.name)} cannot ${studying ? 'study' : 'start'} yet:`)
+    for (const step of steps) say(`    ${yellow('○')} ${step}`)
+    return
+  }
+  if (studying) pendingPlan = undefined
   if (pendingPlan && pendingPlan.agent !== agent.name) pendingPlan = undefined
   // The go-ahead for a plan and changes to it both continue the planning session; anything else continues the agent's conversation.
-  continuing = pendingPlan?.sessionId ?? threads.get(agent.name)
+  continuing = studying ? undefined : pendingPlan?.sessionId ?? threads.get(agent.name)
   say(`${green('●')} ${bold(agent.name)} ${dim(`(${template})${pendingPlan ? (approved ? ' is carrying out the plan' : ' is revising the plan') : continuing ? ', same conversation' : ''}`)}`)
-  const planning = settings.plan && !approved
+  const planning = settings.plan && !approved && !studying
 
   const runner = createRunner({
     templatesDir: 'templates', stateDir,
@@ -156,14 +175,15 @@ async function runTask(request: string, approved = false): Promise<void> {
     result = await runner.runTask({
       tenant: TENANT, template, agentName: agent.name,
       request: approved ? 'Approved. Carry out the plan now.' : request,
-      mode: planning ? 'plan' : 'act',
+      mode: studying ? 'study' : planning ? 'plan' : 'act',
+      ...(agent.briefing && !studying ? { briefing: agent.briefing } : {}),
       ...(continuing ? { continue: { sessionId: continuing } } : {}),
       ...(settings.thinking === 'agent' ? {} : { reasoningEffort: settings.thinking }),
       onStart: ({ sessionId }) => {
         session = sessionId
         const thinking = settings.thinking === 'agent' ? templates.find(t => t.name === template)?.reasoningEffort : settings.thinking
-        say(`${green('●')} ${planning ? 'Planning' : 'Agent started'} ${dim(`on ${settings.model}, thinking ${thinking}`)}`)
-        working(planning ? 'planning' : 'working')
+        say(`${green('●')} ${studying ? 'Studying the business' : planning ? 'Planning' : 'Agent started'} ${dim(`on ${settings.model}, thinking ${thinking}`)}`)
+        working(studying ? 'studying' : planning ? 'planning' : 'working')
         watch = setInterval(flush, 250)
       },
     })
@@ -184,6 +204,14 @@ ${render(result.plan || '(empty plan)')}
 `)
     say(dim(`  ${agent.name}, ${seconds} s, ${count(result.usage)} tokens`))
     say(`  ${yellow('Nothing has been done yet.')} ${dim('Press Enter (or type go) to carry it out, type changes to revise it, or /cancel.')}`)
+  } else if (result.status === 'done' && studying) {
+    pendingBriefing = { agent: agent.name, text: result.response.slice(0, 3000) }
+    say(`
+${bold(`  What ${agent.name} learned`)}
+${render(result.response || '(nothing)')}
+`)
+    say(dim(result.report.split('\n').map(line => `  ${line}`).join('\n')))
+    say(`  ${yellow('Not saved yet.')} ${dim('Press Enter (or type yes) to accept these notes, type a correction to have it study again, or /cancel.')}`)
   } else if (result.status === 'done') {
     pendingPlan = undefined
     threads.set(agent.name, result.sessionId)
@@ -220,6 +248,7 @@ const HELP = `
   ${bold('/agent')} <name>           talk to that agent      ${bold('/agent remove')} <name>
   ${bold('/model')} [name]           ${MODELS.join(' or ')}
   ${bold('/think')} [level]          off, low, high, max, or agent (each agent's own setting)
+  ${bold('/study')} [what to focus on]  the agent reads the knowledge base and its accounts and writes notes for you to accept
   ${bold('/plan')} [on|off]          on: the agent shows a plan and waits for your go-ahead before acting
   ${bold('/cancel')}                 drop the plan that is waiting
   ${bold('/pending')}                actions held for your approval
@@ -253,7 +282,8 @@ async function command(line: string): Promise<boolean> {
     case 'quit': case 'exit': case 'q': return false
     case 'status': await status(); break
     case 'new': if (settings.agent) threads.delete(settings.agent); pendingPlan = undefined; say(dim('  Fresh conversation.')); break
-    case 'cancel': say(dim(pendingPlan ? '  Plan dropped. Nothing was done.' : '  No plan is waiting.')); pendingPlan = undefined; break
+    case 'cancel': say(dim(pendingBriefing ? '  Notes dropped.' : pendingPlan ? '  Plan dropped. Nothing was done.' : '  Nothing is waiting.')); pendingPlan = undefined; pendingBriefing = undefined; break
+    case 'study': pendingBriefing = undefined; await runTask(argument, false, true); break
     case 'plan':
       if (argument === 'on' || argument === 'off') { settings.plan = argument === 'on'; say(dim(`  Plan first: ${argument}`)) }
       else say(`  ${settings.plan ? `${bold('on')}   off` : `on   ${bold('off')}`}`)
@@ -264,7 +294,9 @@ async function command(line: string): Promise<boolean> {
         const created = agents.add(rest[1] ?? '', rest[2] ?? '', templates.map(t => t.name))
         settings.agent = created.name
         pendingPlan = undefined
-        say(`${green('✓')} ${bold(created.name)} is ready ${dim(`on ${created.template}. Type a task.`)}`)
+        const steps = setupSteps(created)
+        say(`${green('✓')} ${bold(created.name)} created ${dim(`on ${created.template}.`)} ${steps.length ? 'Before its first task:' : 'Type a task.'}`)
+        for (const step of steps) say(`    ${yellow('○')} ${step}`)
       } else if (rest[0] === 'remove') {
         const gone = agents.get(rest[1] ?? '')
         agents.remove(rest[1] ?? '')
@@ -278,7 +310,11 @@ async function command(line: string): Promise<boolean> {
         say(dim(`  Talking to ${chosen.name} (${chosen.template}).`))
       } else {
         if (agents.list().length === 0) say(dim('  No agents yet. Create one: /agent new <name> <template>'))
-        for (const a of agents.list()) say(`  ${settings.agent === a.name ? green('●') : ' '} ${bold(a.name)} ${dim(`${a.template}, since ${a.createdAt.slice(0, 10)}`)}`)
+        for (const a of agents.list()) {
+          const steps = setupSteps(a)
+          say(`  ${settings.agent === a.name ? green('●') : ' '} ${bold(a.name)} ${dim(`${a.template}, since ${a.createdAt.slice(0, 10)}`)} ${steps.length ? yellow(`not ready: ${steps.length} step${steps.length > 1 ? 's' : ''} left`) : green('ready')}`)
+          for (const step of steps) say(`      ${yellow('○')} ${step}`)
+        }
         say(dim('\n  Templates an agent can be created on:'))
         for (const t of templates) say(`    ${bold(t.name)} ${dim(describe(t))}`)
       }
@@ -389,7 +425,20 @@ prompt()
 for await (const raw of rl) {
   const typed = raw.trim()
   // With a plan waiting, an empty line or a plain yes is the go-ahead.
-  const goAhead = pendingPlan !== undefined && /^(|go|yes|y|ok|okay|approve|run|do it)$/i.test(typed)
+  const yes = /^(|go|yes|y|ok|okay|approve|run|do it)$/i.test(typed)
+  if (pendingBriefing && !typed.startsWith('/')) {
+    // Accepting the notes, or sending the agent back to study with a correction.
+    const { agent: studied, text } = pendingBriefing
+    pendingBriefing = undefined
+    rl.pause()
+    try {
+      if (yes) { agents.setBriefing(studied, text); say(`${green('✓')} ${bold(studied)} is ready. ${dim('Type a task.')}`) } else await runTask(typed, false, true)
+    } catch (error) { stopWorking(); say(red(`  ${error instanceof Error ? error.message : String(error)}`)) }
+    rl.resume()
+    prompt()
+    continue
+  }
+  const goAhead = pendingPlan !== undefined && yes
   const line = goAhead ? 'go' : typed
   if (line) {
     if (!tty) say(`\n${blue('❯')} ${line}`)

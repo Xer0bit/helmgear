@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import type { ApprovalQueue, AuditLog, MemoryStore } from '@helmgear/gateway'
 import { route, type Classifier, type Judge } from '@helmgear/router'
 import { Helmgear, RequestTimeoutError, TransportClosedError, type HelmgearOptions, type RunResult } from '@helmgear/sdk-client'
-import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
+import { loadTemplates, type ReasoningEffort, type Template } from '@helmgear/template'
 import { templatePatch, type ModelHost, type ToolInfo } from './patch.ts'
 import { actionReport, verifyReply, type ActionFact } from './verify.ts'
 
@@ -53,6 +53,8 @@ export interface RunnerOptions {
    * that resumes the session. Default `{ reasoningEffort: 'high' }`; `false` repairs in the same process.
    */
   escalate?: { reasoningEffort: ReasoningEffort } | false
+  /** Default true: a template whose required connectors are not connected is refused. Set false only to test with stand-ins. */
+  enforceRequirements?: boolean
   /** Test seam: build the harness client. */
   harnessFactory?: (options: HelmgearOptions) => HarnessLike
 }
@@ -90,6 +92,11 @@ export class RunnerError extends Error {
 const TENANT = /^[a-z0-9][a-z0-9_-]{0,63}$/
 const SESSION = /^[A-Za-z0-9_-]{1,128}$/
 const PLAN_REQUEST = 'Do not act yet and do not call any tool. Write a short plan for the request below, in plain language without tool names: the few steps you will take, what you will hand back, any assumption you are making, and at most one question if the task cannot be done without an answer. Keep it under 90 words.\n\nRequest: '
+/** What an agent is asked to do before its first task: learn the business and the accounts it was given. */
+const STUDY_REQUEST = `Study this business before you start working for it. Nothing is to be written, drafted, sent or posted now.
+1. List the knowledge base, then search and read it for what your job needs: what the business sells and to whom, its prices and offers, its voice and wording rules, and any policy that limits what you may say.
+2. If you have tools that read an account you were given access to (a profile, past posts, an inbox, a ledger), look at it once to see how it is used.
+3. Reply with your briefing: at most 180 words of plain facts you will rely on, each one found in what you read, then one line starting "Missing:" that names what your job needs and you could not find. Do not invent anything.`
 const PASSED_ENV = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL']
 // DeepSeek's own API stores request data in mainland China.
 const PRC_HOSTED_PROVIDERS = ['deepseek-official']
@@ -136,6 +143,15 @@ export function modelHostFromEnv(env: NodeJS.ProcessEnv = process.env): RunnerOp
   return { provider: env.MODEL_HOST_NAME || 'second-host', model: env.MODEL_HOST_MODEL, host: { baseURL: env.MODEL_HOST_URL, apiKeyEnv: 'MODEL_HOST_API_KEY' } }
 }
 
+/**
+ * The requirements of a template that nothing connected meets, each as "a or b".
+ * Without `describe` nothing can be checked and nothing is reported missing.
+ */
+export function missingConnectors(template: Pick<Template, 'requires'>, describe: ((connectors: string[]) => unknown[]) | undefined): string[] {
+  if (!describe) return []
+  return template.requires.filter(alternatives => !alternatives.some(name => describe([name]).length > 0)).map(alternatives => alternatives.join(' or '))
+}
+
 export interface TaskInput {
   tenant: string
   request: string
@@ -143,13 +159,15 @@ export interface TaskInput {
   template?: string
   /** The name a person gave this agent. A named agent stays in its template's job and turns other requests down. Needs `template`. */
   agentName?: string
+  /** The notes this agent wrote when it studied the business, as a person approved them. At most 3,000 characters. */
+  briefing?: string
   /** Use this reasoning effort for this task instead of the template's. */
   reasoningEffort?: ReasoningEffort
   /**
    * `plan`: the agent gets no tools and only writes what it would do; nothing is acted on.
    * Continue the returned session to carry the plan out. Default `act`.
    */
-  mode?: 'plan' | 'act'
+  mode?: 'plan' | 'act' | 'study'
   /** Continue an earlier session of this tenant instead of starting a new one. Needs `template`. */
   continue?: { sessionId: string }
   /** Called once the agent is about to start, before its first tool call. */
@@ -167,7 +185,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
   })
 
   return {
-    async runTask({ tenant, request, template: named, agentName, reasoningEffort, onStart, mode, continue: earlier }) {
+    async runTask({ tenant, request, template: named, agentName, briefing, reasoningEffort, onStart, mode, continue: earlier }) {
       if (!TENANT.test(tenant)) return { status: 'refused', reason: 'tenant must match [a-z0-9][a-z0-9_-]{0,63}' }
       if (earlier && !SESSION.test(earlier.sessionId)) return { status: 'refused', reason: 'session id is not valid' }
       if (earlier && named === undefined) return { status: 'refused', reason: 'continuing a session needs its template' }
@@ -183,6 +201,10 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
         if (routed.kind === 'none') return { status: 'no-template', reason: routed.detail ? `${routed.reason}: ${routed.detail}` : routed.reason }
         template = routed.template
       }
+      if (briefing !== undefined && briefing.length > 3000) return { status: 'refused', reason: 'the briefing is longer than 3,000 characters' }
+      // An agent whose job needs an account does not start without it: it would only pretend, or send to a stand-in.
+      const missing = options.enforceRequirements === false ? [] : missingConnectors(template, options.gateway.describe)
+      if (missing.length > 0) return { status: 'refused', reason: `${template.name} cannot run until these are connected: ${missing.join('; ')}` }
       const problem = hostProblem(options.model)
       if (problem) return { status: 'refused', reason: problem }
       if (template.dataClass === 'sensitive' && prcHosted(options.model)) {
@@ -192,10 +214,13 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
       const home = join(options.stateDir, 'tenants', tenant)
       const sessionId = earlier?.sessionId ?? `session-${randomUUID().replaceAll('-', '')}`
       const planning = mode === 'plan'
+      const studying = mode === 'study'
+      // Studying only looks: the grant holds the tools that read and none that draft or send.
+      const readOnly = (options.gateway.describe?.(template.connectors) ?? []).filter(tool => tool.tier === 'read').map(tool => tool.name.replace(/^mcp__gateway__/, '').replace('__', '.'))
       mkdirSync(join(home, 'work'), { recursive: true })
       const patchFile = join(home, `${sessionId}.patch.yml`)
       // While planning the agent holds a token that opens no connector, so a plan cannot act.
-      const token = options.gateway.grant({ tenant, sessionId, template: template.name, connectors: planning ? [] : template.connectors, maxToolCalls: template.maxToolCalls })
+      const token = options.gateway.grant({ tenant, sessionId, template: template.name, connectors: planning ? [] : studying ? readOnly : template.connectors, maxToolCalls: studying ? Math.max(template.maxToolCalls, 10) : template.maxToolCalls })
       const pendingActionIds = (): string[] =>
         options.gateway.approvals.list(tenant).filter(action => action.ctx.sessionId === sessionId).map(action => action.actionId)
       let harness: HarnessLike | undefined
@@ -203,9 +228,10 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
       try {
         writeFileSync(patchFile, templatePatch(template, options.gateway, {
           memory: options.memory?.render(tenant, template.name),
-          tools: options.gateway.describe?.(template.connectors),
+          tools: options.gateway.describe?.(studying ? readOnly : template.connectors),
           planning,
           agentName,
+          briefing,
           model: options.model,
         }), { mode: 0o600 })
         const base = options.env ?? Object.fromEntries((options.model.host ? [...PASSED_ENV.filter(name => !name.startsWith('DEEPSEEK_')), options.model.host.apiKeyEnv] : PASSED_ENV).flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
@@ -246,7 +272,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
           }
           return turnResult
         }
-        let result = count(await turn(planning ? PLAN_REQUEST + request : request))
+        let result = count(await turn(planning ? PLAN_REQUEST + request : studying ? STUDY_REQUEST + (request.trim() ? `\n\nThe person adds: ${request.trim()}` : '') : request))
         if (result.finishReason === 'error') {
           return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), report: actionReport(actions()), verified: false, problems: [], usage }
         }

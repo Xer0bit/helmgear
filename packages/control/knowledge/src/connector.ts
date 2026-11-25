@@ -12,6 +12,14 @@ export function knowledgeConnector(options: { kb: KnowledgeBase }): Connector {
     name: 'kb',
     tools: [
       {
+        name: 'kb.list',
+        description: 'List every document in the business\'s knowledge base with its title and size. Use it to see what there is to read.',
+        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+        tier: 'read',
+        untrusted: true, curated: true,
+        async run(_input, ctx) { return { documents: options.kb.list(ctx.tenant).map(({ id, title, source, chars }) => ({ documentId: id, title, source, chars })) } },
+      },
+      {
         name: 'kb.search',
         description: 'Search the business\'s own knowledge base (its policies, products, prices, procedures). Returns the best passages with a citation for each. Use this before answering any question about the business.',
         inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 500 }, limit: { type: 'integer', minimum: 1, maximum: 8 } }, required: ['query'], additionalProperties: false },

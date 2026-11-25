@@ -11,6 +11,12 @@ export interface Template {
   persona: string
   /** Connector names the gateway may expose to this agent. */
   connectors: string[]
+  /**
+   * What must really be connected before this agent may run. Each entry is a
+   * list of alternatives: one connector of each entry has to offer a tool.
+   * Written in the template as `requires: [email, 'x|linkedin|instagram']`.
+   */
+  requires: string[][]
   dataClass: DataClass
   reasoningEffort: ReasoningEffort
   /** The most tool calls one task may make; the gateway refuses the rest. Default 12. */

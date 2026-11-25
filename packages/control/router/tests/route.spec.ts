@@ -3,7 +3,7 @@ import { expect, it } from 'vitest'
 import { jevClassifier, route, type Classifier } from '../src/index.ts'
 
 const template = (name: string): Template => ({
-  name, description: `Does ${name}.`, persona: 'p', connectors: [], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12, dir: `/t/${name}`,
+  name, description: `Does ${name}.`, persona: 'p', connectors: [], requires: [], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12, dir: `/t/${name}`,
 })
 const TEMPLATES = [template('social-post'), template('email-triage'), template('bookkeeping-proposal')]
 

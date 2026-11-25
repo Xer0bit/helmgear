@@ -4,6 +4,7 @@ description: Answers a question about the business itself, such as its policies,
 metadata:
   helmgear:
     connectors: [kb]
+    requires: [kb]
     dataClass: public
     maxToolCalls: 4
     persona: |

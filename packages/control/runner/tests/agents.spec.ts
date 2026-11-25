@@ -36,3 +36,13 @@ it('remove deletes one agent', () => {
   expect(agents.list().map(agent => agent.name)).toEqual(['Leo'])
   expect(() => agents.remove('maya')).toThrow(/no agent called maya/)
 })
+
+it('keeps the briefing a person accepted, and refuses an empty or oversized one', () => {
+  const agents = store()
+  agents.add('Maya', 'social-post', TEMPLATES)
+  expect(agents.setBriefing('maya', '  Tidewater sells tide tables.  ').briefing).toBe('Tidewater sells tide tables.')
+  expect(agents.get('Maya')!.briefing).toBe('Tidewater sells tide tables.')
+  expect(() => agents.setBriefing('Maya', '  ')).toThrow(/empty/)
+  expect(() => agents.setBriefing('Maya', 'x'.repeat(3001))).toThrow(/3,000/)
+  expect(() => agents.setBriefing('Nobody', 'text')).toThrow(/no agent/)
+})

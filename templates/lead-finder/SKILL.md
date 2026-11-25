@@ -4,6 +4,7 @@ description: Finds prospective customers for the business on the public web and 
 metadata:
   helmgear:
     connectors: [firecrawl, kb, jev]
+    requires: [firecrawl]
     dataClass: public
     maxToolCalls: 8
     persona: |

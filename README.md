@@ -77,6 +77,28 @@ await runner.runTask({ tenant: 'acme', template: maya.template, agentName: maya.
 
 A named agent is told its name and its one job, and turns down work outside it in one line without calling a tool. To do a different job, create another agent. The router (`route`, `jevClassifier`) is still there for applications that want a request matched to a template automatically; `runTask` uses it only when no `template` is given.
 
+### What an agent needs before it may work
+
+A template says which accounts its job cannot be done without, and the runner refuses to start it until they are connected:
+
+```yaml
+connectors: [firecrawl, x, linkedin, instagram, outbox, memory, kb, jev]   # what it may use
+requires: ['x|linkedin|instagram']                                       # what must really be connected: one of these
+```
+
+`runTask` answers `{ status: 'refused', reason: 'social-post cannot run until these are connected: x or linkedin or instagram' }`. `missingConnectors(template, gateway.describe)` gives the same list for a setup screen. Pass `enforceRequirements: false` only to test with stand-ins.
+
+An agent also studies the business before its first task:
+
+```ts
+const studied = await runner.runTask({ tenant, template: maya.template, agentName: maya.name, mode: 'study', request: '' })
+// It held only tools that read: it listed and read the knowledge base and looked at any account it can read.
+agents.setBriefing('Maya', studied.response)        // after a person has read and accepted the notes
+await runner.runTask({ tenant, template: maya.template, agentName: maya.name, briefing: agents.get('Maya')!.briefing, request: '...' })
+```
+
+The notes (at most 3,000 characters) end with a "Missing:" line naming what the job needs and the knowledge base does not hold. In the console, `/agent new` prints what is still to do, `/study` runs this step, and a task is refused until the agent's accounts are connected, the knowledge base has a document and the notes are accepted.
+
 ### Jev as the agent's tool
 
 `jevConnector({ apiKey })` from `@helmgear/router` gives an agent two fast judgement tools, each answered in well under a second:

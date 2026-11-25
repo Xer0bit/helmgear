@@ -119,7 +119,7 @@ it('the connector gives an agent search and read, both read-only, and nothing th
   const base = kb()
   const doc = await base.add('acme', { title: 'Refund policy', source: 'refunds.md', text: REFUNDS })
   const connector = knowledgeConnector({ kb: base })
-  expect(connector.tools.map(t => [t.name, t.tier, t.untrusted])).toEqual([['kb.search', 'read', true], ['kb.read', 'read', true]])
+  expect(connector.tools.map(t => [t.name, t.tier, t.untrusted])).toEqual([['kb.list', 'read', true], ['kb.search', 'read', true], ['kb.read', 'read', true]])
   const core = createCore({ connectors: [connector], stateDir: mkdtempSync(join(tmpdir(), 'helmgear-kbc-')) })
   const ctx = { tenant: 'acme', sessionId: 's1', template: 'knowledge-answer' }
   const found = await core.executor.call('kb.search', { query: 'gift card refund' }, ctx, 'k1') as { status: 'ok'; result: { passages: { cite: string; documentId: string; text: string }[] } }

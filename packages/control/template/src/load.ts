@@ -4,7 +4,7 @@ import { parse as parseYaml } from 'yaml'
 import { TemplateError, type DataClass, type ReasoningEffort, type Template } from './types.ts'
 
 const NAME = /^[a-z0-9-]{1,48}$/
-const KEYS = ['persona', 'connectors', 'dataClass', 'reasoningEffort', 'maxToolCalls']
+const KEYS = ['persona', 'connectors', 'requires', 'dataClass', 'reasoningEffort', 'maxToolCalls']
 const DATA_CLASSES: readonly string[] = ['public', 'sensitive'] satisfies DataClass[]
 const EFFORTS: readonly string[] = ['off', 'low', 'high', 'max'] satisfies ReasoningEffort[]
 
@@ -38,6 +38,13 @@ function loadOne(dir: string, folder: string): Template {
   if (!Array.isArray(connectors) || !connectors.every((c): c is string => typeof c === 'string' && c.length > 0)) {
     return fail('metadata.helmgear.connectors', 'must be an array of connector names')
   }
+  const required = meta.requires ?? []
+  if (!Array.isArray(required) || !required.every((entry): entry is string => typeof entry === 'string' && entry.length > 0)) {
+    return fail('metadata.helmgear.requires', 'must be an array of connector names; write alternatives as a|b')
+  }
+  const requires = required.map(entry => entry.split('|').map(name => name.trim()))
+  // An agent cannot use a connector its template does not list, so requiring one would never be met.
+  for (const name of requires.flat()) if (!connectors.includes(name)) fail('metadata.helmgear.requires', `"${name}" is not in connectors`)
   if (typeof meta.dataClass !== 'string' || !DATA_CLASSES.includes(meta.dataClass)) {
     return fail('metadata.helmgear.dataClass', `must be one of ${DATA_CLASSES.join(', ')}`)
   }
@@ -48,7 +55,7 @@ function loadOne(dir: string, folder: string): Template {
   const budget = meta.maxToolCalls ?? 12
   if (typeof budget !== 'number' || !Number.isInteger(budget) || budget < 1) return fail('metadata.helmgear.maxToolCalls', 'must be a whole number of at least 1')
   return {
-    name, description, persona, connectors: [...connectors], maxToolCalls: budget,
+    name, description, persona, connectors: [...connectors], requires, maxToolCalls: budget,
     dataClass: meta.dataClass as DataClass, reasoningEffort: effort as ReasoningEffort, dir,
   }
 }

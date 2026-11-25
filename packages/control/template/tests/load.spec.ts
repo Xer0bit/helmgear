@@ -27,7 +27,7 @@ it('loads a valid template', () => {
   write(dir, 'social-post', VALID)
   expect(loadTemplates(dir)).toEqual([{
     name: 'social-post', description: 'Does social-post.', persona: VALID.persona,
-    connectors: ['firecrawl', 'outbox'], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12, dir: join(dir, 'social-post'),
+    connectors: ['firecrawl', 'outbox'], requires: [], dataClass: 'public', reasoningEffort: 'off', maxToolCalls: 12, dir: join(dir, 'social-post'),
   }])
 })
 
@@ -104,4 +104,16 @@ it('reads an optional tool budget and rejects one that is not a positive whole n
   const bad = root()
   write(bad, 'a', { ...VALID, maxToolCalls: 0 })
   expect(failure(bad).field).toBe('metadata.helmgear.maxToolCalls')
+})
+
+it('reads requires as lists of alternatives, and rejects one that is not among the connectors', () => {
+  const dir = root()
+  write(dir, 'social-post', { ...VALID, connectors: ['x', 'linkedin', 'email'], requires: ['email', 'x|linkedin'] })
+  expect(loadTemplates(dir)[0]!.requires).toEqual([['email'], ['x', 'linkedin']])
+  const bad = root()
+  write(bad, 'a', { ...VALID, requires: ['instagram'] })
+  expect(() => loadTemplates(bad)).toThrow(/requires: "instagram" is not in connectors/)
+  const shape = root()
+  write(shape, 'a', { ...VALID, requires: 'firecrawl' })
+  expect(() => loadTemplates(shape)).toThrow(/requires/)
 })

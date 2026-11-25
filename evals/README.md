@@ -69,7 +69,7 @@ The reranker has not been measured: no reranking server was running. Set `HELMGE
 
 ## Named agents: 25 November 2026
 
-Two cases for an agent created with a name and one fixed template, 5 trials each: it turns down work outside its job without using a tool (5 of 5), and it still does its own job with one held send (5 of 5).
+Three cases for an agent created with a name and one fixed template, 5 trials each: it turns down work outside its job without using a tool (5 of 5), it still does its own job with one held send (5 of 5), and when told to study the business it only reads the knowledge base and returns notes with a "Missing:" line (5 of 5). The eval runs with `enforceRequirements: false`, because its cases use stand-ins for email.
 
 ## Known weaknesses
 

@@ -4,6 +4,7 @@ description: Turns an invoice or receipt into a proposed double-entry journal en
 metadata:
   helmgear:
     connectors: [kb]
+    requires: [kb]
     dataClass: sensitive
     persona: |
       You are a bookkeeper preparing journal entries for review. You are given the text of one invoice or receipt in the request.
