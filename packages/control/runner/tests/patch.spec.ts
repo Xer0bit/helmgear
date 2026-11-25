@@ -87,3 +87,11 @@ it('memory and tool text cannot break out of the YAML scalar', () => {
   expect(parsed.find(r => r.id === 'system-prompt')!.config.personaPrefix).toContain(hostile)
   expect(JSON.stringify(parsed).match(/"js"/g)).toHaveLength(1)
 })
+
+it('a named agent is told its name, its one job, and to turn other work down', () => {
+  const text = persona({ agentName: 'Maya' })
+  expect(text).toMatch(/^Your name is Maya\. You have one job: Drafts posts\./)
+  expect(text).toContain('outside your job')
+  expect(text).toContain(TEMPLATE.persona)
+  expect(persona()).not.toContain('Your name is')
+})

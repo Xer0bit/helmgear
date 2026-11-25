@@ -141,6 +141,8 @@ export interface TaskInput {
   request: string
   /** Name a template to skip routing. */
   template?: string
+  /** The name a person gave this agent. A named agent stays in its template's job and turns other requests down. Needs `template`. */
+  agentName?: string
   /** Use this reasoning effort for this task instead of the template's. */
   reasoningEffort?: ReasoningEffort
   /**
@@ -165,10 +167,13 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
   })
 
   return {
-    async runTask({ tenant, request, template: named, reasoningEffort, onStart, mode, continue: earlier }) {
+    async runTask({ tenant, request, template: named, agentName, reasoningEffort, onStart, mode, continue: earlier }) {
       if (!TENANT.test(tenant)) return { status: 'refused', reason: 'tenant must match [a-z0-9][a-z0-9_-]{0,63}' }
       if (earlier && !SESSION.test(earlier.sessionId)) return { status: 'refused', reason: 'session id is not valid' }
       if (earlier && named === undefined) return { status: 'refused', reason: 'continuing a session needs its template' }
+      if (agentName !== undefined && named === undefined) return { status: 'refused', reason: 'a named agent needs its template' }
+      // The name goes into the agent's instructions, so it is held to plain characters.
+      if (agentName !== undefined && !/^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(agentName)) return { status: 'refused', reason: 'agent name is not valid' }
       const templates = loadTemplates(options.templatesDir)
 
       let template = templates.find(t => t.name === named)
@@ -200,6 +205,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
           memory: options.memory?.render(tenant, template.name),
           tools: options.gateway.describe?.(template.connectors),
           planning,
+          agentName,
           model: options.model,
         }), { mode: 0o600 })
         const base = options.env ?? Object.fromEntries((options.model.host ? [...PASSED_ENV.filter(name => !name.startsWith('DEEPSEEK_')), options.model.host.apiKeyEnv] : PASSED_ENV).flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))

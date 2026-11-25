@@ -1,3 +1,5 @@
+export { AgentStore } from './agents.ts'
+export type { NamedAgent } from './agents.ts'
 export { runBatch } from './batch.ts'
 export type { BatchItem, BatchResult } from './batch.ts'
 export { templatePatch } from './patch.ts'

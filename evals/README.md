@@ -67,6 +67,10 @@ The cache share is high without any change to prompt order: the system prompt is
 
 The reranker has not been measured: no reranking server was running. Set `HELMGEAR_RERANKER_URL` and run `pnpm eval --only kb`.
 
+## Named agents: 25 November 2026
+
+Two cases for an agent created with a name and one fixed template, 5 trials each: it turns down work outside its job without using a tool (5 of 5), and it still does its own job with one held send (5 of 5).
+
 ## Known weaknesses
 
 - **A send that becomes a draft.** Occasionally an agent asked to send to a given address saves a draft and asks for confirmation instead. It says so honestly, and `verified` stays true; check `pendingActionIds` to see whether a send was queued.

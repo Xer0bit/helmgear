@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { firecrawlConnector, mcpConnector, memoryConnector, outboxConnector, smtpConnector, xConnector, type Connector, type McpConnectorOptions, type MemoryStore } from '@helmgear/gateway'
 import { knowledgeConnector, type KnowledgeBase } from '@helmgear/knowledge'
+import { jevConnector } from '@helmgear/router'
 
 export interface Connected { connectors: Connector[]; lines: string[]; close(): Promise<void> }
 
@@ -20,6 +21,10 @@ export async function connect(stateDir: string, memory: MemoryStore, kb: Knowled
   lines.push(env.MODEL_HOST_URL && env.MODEL_HOST_MODEL
     ? `on   second model host: ${env.MODEL_HOST_MODEL} at ${env.MODEL_HOST_URL}; pick it with /model to run sensitive agents`
     : 'off  second model host: add MODEL_HOST_URL, MODEL_HOST_MODEL and MODEL_HOST_API_KEY to .env to run sensitive agents')
+  if (env.TYPESAFE_API_KEY) {
+    connectors.push(jevConnector({ apiKey: env.TYPESAFE_API_KEY }))
+    lines.push('on   jev: agents can ask Jev for quick yes/no and pick-one judgements')
+  } else lines.push('off  jev: add TYPESAFE_API_KEY to .env to give agents fast judgement tools')
   const closers: (() => Promise<void>)[] = []
 
   if (env.SMTP_HOST && env.SMTP_FROM) {

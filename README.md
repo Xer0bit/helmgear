@@ -63,6 +63,31 @@ const result = await runner.runTask({ tenant: 'acme', request: 'Draft a post abo
 
 `runTask` returns one of: `done`, `failed` (the model turn ended in an error), `no-template`, or `refused`. It throws `RunnerError` if the agent process dies or stops answering.
 
+## Named agents
+
+The simplest way to use Helmgear: give an agent a name, pick its template once, and send it tasks. Nothing is routed per message.
+
+```ts
+import { AgentStore } from '@helmgear/runner'
+const agents = new AgentStore(`${stateDir}/agents.json`)
+agents.add('Maya', 'social-post', templateNames)          // the template is fixed for good
+const maya = agents.get('Maya')!
+await runner.runTask({ tenant: 'acme', template: maya.template, agentName: maya.name, request: '...' })
+```
+
+A named agent is told its name and its one job, and turns down work outside it in one line without calling a tool. To do a different job, create another agent. The router (`route`, `jevClassifier`) is still there for applications that want a request matched to a template automatically; `runTask` uses it only when no `template` is given.
+
+### Jev as the agent's tool
+
+`jevConnector({ apiKey })` from `@helmgear/router` gives an agent two fast judgement tools, each answered in well under a second:
+
+| Tool | What it does |
+|---|---|
+| `jev.judge` | Up to 8 yes/no questions about one text, a probability for each, read as yes (0.7 and above), no (0.3 and below) or not settled |
+| `jev.pick` | Which one of 2 to 12 described options a text belongs to, and whether any fits at all |
+
+Jev judges; the agent decides what to do with the answer. The text goes to TypeSafe, so the two `sensitive` templates do not list `jev`. Jev also still checks each reply against the audit log (see Checked replies).
+
 ## Approvals
 
 ```ts
@@ -123,7 +148,7 @@ pnpm agent          # a terminal console: type a task, watch the agent work
 pnpm firecrawl:up   # start the self-hosted Firecrawl containers if web tools fail
 ```
 
-The console shows which agent was picked, each tool call as the gateway records it, the reply, and whether the reply matches that record. `/help` lists its commands; `/status` shows which connectors are on.
+Create an agent with `/agent new <name> <template>`, switch with `/agent <name>`, and type a task. The console shows each tool call as the gateway records it, the reply, and whether the reply matches that record. Each agent keeps its own conversation. `/help` lists its commands; `/status` shows which connectors are on.
 
 ## Plan first
 

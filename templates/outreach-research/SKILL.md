@@ -3,7 +3,7 @@ name: outreach-research
 description: Researches one named company from its public web pages and writes a first-touch sales email to it, sending the email when asked.
 metadata:
   helmgear:
-    connectors: [firecrawl, email, outbox, memory, kb]
+    connectors: [firecrawl, email, outbox, memory, kb, jev]
     dataClass: public
     maxToolCalls: 6
     persona: |

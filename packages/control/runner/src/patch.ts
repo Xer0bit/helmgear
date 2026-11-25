@@ -39,11 +39,15 @@ const RULES = `Rules for every task:
 export function templatePatch(
   template: Template,
   gateway: { url: string },
-  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined; model?: { provider: string; model: string; host?: ModelHost | undefined } | undefined } = {},
+  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined; agentName?: string | undefined; model?: { provider: string; model: string; host?: ModelHost | undefined } | undefined } = {},
 ): string {
   // A JSON string is a valid YAML double-quoted scalar, so every value is quoted that way.
   const q = (value: string): string => JSON.stringify(value)
   const sections = [template.persona.trim(), RULES]
+  // A named agent has one job for good. Nothing routes around it, so it has to turn down other work itself.
+  if (extras.agentName) {
+    sections.unshift(`Your name is ${extras.agentName}. You have one job: ${template.description.trim()}\nIf a request is not part of that job, do not attempt it and call no tool: say in one line that it is outside your job and what you do instead. A follow-up about work you already did is part of your job.`)
+  }
   if (extras.tools) {
     sections.push(extras.tools.length === 0
       ? 'You have no tools for this task.'

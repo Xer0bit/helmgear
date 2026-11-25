@@ -10,8 +10,8 @@ import { existsSync } from 'node:fs'
 import { basename } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createCore, MemoryStore, startGateway, type PendingAction } from '@helmgear/gateway'
-import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
-import { createRunner, modelHostFromEnv, type RunnerOptions, type TaskResult } from '@helmgear/runner'
+import { jevJudge, type Classifier } from '@helmgear/router'
+import { AgentStore, createRunner, modelHostFromEnv, type RunnerOptions, type TaskResult } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
 import { EXTRACTABLE, extractText, KnowledgeBase, teiEmbedder, teiReranker } from '@helmgear/knowledge'
 import { connect } from './connectors.ts'
@@ -75,19 +75,21 @@ const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
 const gateway = await startGateway({ executor: core.executor, connectors })
 const jevKey = process.env.TYPESAFE_API_KEY ?? ''
-const classifier = jevClassifier({ apiKey: jevKey })
+// Nothing is routed here: every task goes to the agent you chose, on the template it was created with.
+const classifier: Classifier = { classify: async () => { throw new Error('the console does not route requests') } }
+const agents = new AgentStore(`${stateDir}/agents.json`)
 const judge = jevKey ? jevJudge({ apiKey: jevKey }) : undefined
 
-const settings: { agent: string; model: string; thinking: ReasoningEffort | 'agent'; plan: boolean } = { agent: 'auto', model: MODELS[0]!, thinking: 'agent', plan: true }
-/** The session the conversation is in. A follow-up resumes it, so the agent remembers what was said and done. */
-let thread: { sessionId: string; template: string } | undefined
-/** A plan the agent proposed and is waiting to hear about. */
-let pendingPlan: { sessionId: string; template: string } | undefined
+const settings: { agent: string | undefined; model: string; thinking: ReasoningEffort | 'agent'; plan: boolean } = { agent: agents.list()[0]?.name, model: MODELS[0]!, thinking: 'agent', plan: true }
+/** Each agent's conversation. A follow-up resumes it, so the agent remembers what was said and done. */
+const threads = new Map<string, string>()
+/** A plan an agent proposed and is waiting to hear about. */
+let pendingPlan: { sessionId: string; agent: string } | undefined
 
 const TOOL_WORDS: Record<string, string> = {
   'firecrawl.search': 'Searched the web', 'firecrawl.scrape': 'Read a web page', 'outbox.draft': 'Saved a draft',
   'outbox.send': 'Asked to send', 'memory.propose': 'Proposed something to remember',
-  'firecrawl.research': 'Researched the web', 'kb.search': 'Searched the knowledge base', 'kb.read': 'Read a knowledge-base document', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
+  'jev.judge': 'Asked Jev for a judgement', 'jev.pick': 'Asked Jev to pick', 'firecrawl.research': 'Researched the web', 'kb.search': 'Searched the knowledge base', 'kb.read': 'Read a knowledge-base document', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
 }
 const waiting = (): PendingAction[] => core.approvals.list(TENANT)
 
@@ -115,38 +117,18 @@ async function runTask(request: string, approved = false): Promise<void> {
   let template: string | undefined
   let continuing: string | undefined
 
-  if (pendingPlan) {
-    // Either the go-ahead for the plan, or changes to it: both continue the planning session.
-    template = pendingPlan.template
-    continuing = pendingPlan.sessionId
-    say(`${green('●')} ${approved ? 'Carrying out the plan with' : 'Revising the plan with'} ${bold(template)}`)
-  } else if (settings.agent !== 'auto') {
-    template = settings.agent
-    if (thread?.template === template) continuing = thread.sessionId
-    say(`${green('●')} Using ${bold(template)} ${dim(continuing ? '(you chose it; same conversation)' : '(you chose it)')}`)
-  } else {
-    working('choosing an agent')
-    const t = Date.now()
-    let answer: Awaited<ReturnType<Classifier['classify']>> | undefined
-    const once: Classifier = { classify: async (question) => { answer = await classifier.classify(question); return answer } }
-    const routed = await route(request, templates, once)
-    stopWorking()
-    const scores = (answer?.choices ?? []).sort((x, y) => y.probability - x.probability).slice(0, 3).map(c => `${c.label} ${c.probability.toFixed(2)}`).join(', ')
-    if (routed.kind === 'template') {
-      template = routed.template.name
-      if (thread?.template === template) continuing = thread.sessionId
-      say(`${green('●')} Jev chose ${bold(template)} ${dim(`in ${Date.now() - t} ms (${scores})${continuing ? ', same conversation' : ''}`)}`)
-    } else if (thread && routed.reason !== 'classifier-error') {
-      // A follow-up such as "make it shorter" names no task of its own; it belongs to the agent already in the conversation.
-      template = thread.template
-      continuing = thread.sessionId
-      say(`${green('●')} Continuing with ${bold(template)} ${dim('(the message reads as a follow-up)')}`)
-    } else {
-      say(`${red('●')} No agent fits this request ${dim(`(${routed.reason}${routed.detail ? `: ${routed.detail}` : ''}${scores ? `; ${scores}` : ''})`)}`)
-      say(dim('  Pick one yourself with /agent <name> if you want to try anyway.'))
-      return
-    }
+  const agent = settings.agent ? agents.get(settings.agent) : undefined
+  if (!agent) {
+    say(`${yellow('●')} No agent yet. Create one: ${bold('/agent new <name> <template>')}`)
+    say(dim(`  Templates: ${templates.map(t => t.name).join(', ')}`))
+    return
   }
+  if (!templates.some(t => t.name === agent.template)) throw new Error(`${agent.name}'s template "${agent.template}" no longer exists. Remove the agent and create it again.`)
+  template = agent.template
+  if (pendingPlan && pendingPlan.agent !== agent.name) pendingPlan = undefined
+  // The go-ahead for a plan and changes to it both continue the planning session; anything else continues the agent's conversation.
+  continuing = pendingPlan?.sessionId ?? threads.get(agent.name)
+  say(`${green('●')} ${bold(agent.name)} ${dim(`(${template})${pendingPlan ? (approved ? ' is carrying out the plan' : ' is revising the plan') : continuing ? ', same conversation' : ''}`)}`)
   const planning = settings.plan && !approved
 
   const runner = createRunner({
@@ -172,7 +154,7 @@ async function runTask(request: string, approved = false): Promise<void> {
   let result: TaskResult | { status: 'error'; reason: string }
   try {
     result = await runner.runTask({
-      tenant: TENANT, template,
+      tenant: TENANT, template, agentName: agent.name,
       request: approved ? 'Approved. Carry out the plan now.' : request,
       mode: planning ? 'plan' : 'act',
       ...(continuing ? { continue: { sessionId: continuing } } : {}),
@@ -195,16 +177,16 @@ async function runTask(request: string, approved = false): Promise<void> {
   const seconds = ((Date.now() - started) / 1000).toFixed(1)
   const count = (usage: { inputTokens: number; cachedInputTokens: number; outputTokens: number }): string => (usage.inputTokens + usage.cachedInputTokens + usage.outputTokens).toLocaleString()
   if (result.status === 'plan') {
-    pendingPlan = { sessionId: result.sessionId, template: result.template }
+    pendingPlan = { sessionId: result.sessionId, agent: agent.name }
     say(`
 ${bold('  Plan')}
 ${render(result.plan || '(empty plan)')}
 `)
-    say(dim(`  ${result.template}, ${seconds} s, ${count(result.usage)} tokens`))
+    say(dim(`  ${agent.name}, ${seconds} s, ${count(result.usage)} tokens`))
     say(`  ${yellow('Nothing has been done yet.')} ${dim('Press Enter (or type go) to carry it out, type changes to revise it, or /cancel.')}`)
   } else if (result.status === 'done') {
     pendingPlan = undefined
-    thread = { sessionId: result.sessionId, template: result.template }
+    threads.set(agent.name, result.sessionId)
     say(`
 ${render(result.response || '(empty reply)')}
 `)
@@ -213,12 +195,11 @@ ${render(result.response || '(empty reply)')}
     else say(`${red('✗ The reply does not match what the agent did:')}\n${result.problems.map(problem => `    ${problem}`).join('\n')}`)
     // Written from the gateway's record, not from the reply.
     say(dim(result.report.split('\n').map(line => `  ${line}`).join('\n')))
-    say(dim(`  ${result.template}, ${seconds} s, ${count(result.usage)} tokens${result.usage.cachedInputTokens ? ` (${Math.round(100 * result.usage.cachedInputTokens / (result.usage.inputTokens + result.usage.cachedInputTokens))}% of input from cache)` : ''}`))
+    say(dim(`  ${agent.name}, ${seconds} s, ${count(result.usage)} tokens${result.usage.cachedInputTokens ? ` (${Math.round(100 * result.usage.cachedInputTokens / (result.usage.inputTokens + result.usage.cachedInputTokens))}% of input from cache)` : ''}`))
     showWaiting(result.pendingActionIds)
   } else {
     pendingPlan = undefined
-    if (result.status === 'refused') say(`${red('●')} Refused before starting: ${result.reason}`)
-    else if (result.status === 'no-template') say(`${red('●')} No agent fits: ${result.reason}`)
+    if (result.status === 'refused' || result.status === 'no-template') say(`${red('●')} Refused before starting: ${result.reason}`)
     else say(`${red('●')} ${result.status === 'failed' ? 'The agent stopped with an error' : 'Something went wrong'}: ${result.reason} ${dim(`(${seconds} s)`)}`)
   }
 }
@@ -233,9 +214,10 @@ function pick(argument: string): PendingAction[] {
 }
 
 const HELP = `
-  Type a task and press Enter. Each message is one task for one agent.
+  Type a task and press Enter. It goes to the agent you are talking to; that agent does its one job and turns other work down.
 
-  ${bold('/agent')} [name|auto]      choose who handles requests (no name: list them)
+  ${bold('/agent')}                  your agents. /agent new <name> <template> creates one; its template is fixed for good
+  ${bold('/agent')} <name>           talk to that agent      ${bold('/agent remove')} <name>
   ${bold('/model')} [name]           ${MODELS.join(' or ')}
   ${bold('/think')} [level]          off, low, high, max, or agent (each agent's own setting)
   ${bold('/plan')} [on|off]          on: the agent shows a plan and waits for your go-ahead before acting
@@ -256,10 +238,10 @@ async function status(): Promise<void> {
   const firecrawl = await fetch(firecrawlUrl, { signal: AbortSignal.timeout(1500) }).then(() => true, () => false)
   say(`  ${process.env.DEEPSEEK_API_KEY ? green('✓') : red('✗')} model key   ${jevKey ? green('✓') : red('✗')} Jev key   ${firecrawl ? green('✓') : red('✗')} Firecrawl`)
   if (!process.env.DEEPSEEK_API_KEY) say(red('  No DEEPSEEK_API_KEY in .env: agents cannot run.'))
-  if (!jevKey) say(yellow('  No TYPESAFE_API_KEY in .env: choose an agent with /agent; replies are not checked.'))
+  if (!jevKey) say(yellow('  No TYPESAFE_API_KEY in .env: replies are not checked and agents have no Jev tools.'))
   if (!firecrawl) say(yellow(`  Firecrawl is not answering at ${firecrawlUrl}: web tools will fail. Start it with: bash scripts/firecrawl-up.sh`))
   for (const line of connected.lines) say(`  ${line.startsWith('on') ? green('on ') : dim('off')} ${line.startsWith('on') ? line.slice(5) : dim(line.slice(5))}`)
-  say(dim(`  agent: ${settings.agent}   model: ${settings.model}   thinking: ${settings.thinking}   plan first: ${settings.plan ? 'on' : 'off'}   waiting: ${waiting().length}`))
+  say(dim(`  agent: ${settings.agent ?? 'none yet (/agent new <name> <template>)'}   model: ${settings.model}   thinking: ${settings.thinking}   plan first: ${settings.plan ? 'on' : 'off'}   waiting: ${waiting().length}`))
 }
 
 async function command(line: string): Promise<boolean> {
@@ -270,19 +252,38 @@ async function command(line: string): Promise<boolean> {
     case 'help': say(HELP); break
     case 'quit': case 'exit': case 'q': return false
     case 'status': await status(); break
-    case 'new': thread = undefined; pendingPlan = undefined; say(dim('  Fresh conversation.')); break
+    case 'new': if (settings.agent) threads.delete(settings.agent); pendingPlan = undefined; say(dim('  Fresh conversation.')); break
     case 'cancel': say(dim(pendingPlan ? '  Plan dropped. Nothing was done.' : '  No plan is waiting.')); pendingPlan = undefined; break
     case 'plan':
       if (argument === 'on' || argument === 'off') { settings.plan = argument === 'on'; say(dim(`  Plan first: ${argument}`)) }
       else say(`  ${settings.plan ? `${bold('on')}   off` : `on   ${bold('off')}`}`)
       break
-    case 'agent':
-      if (!argument) {
-        say(`  ${settings.agent === 'auto' ? green('●') : ' '} ${bold('auto')} ${dim('Jev picks, or says none fits')}`)
-        for (const t of templates) say(`  ${settings.agent === t.name ? green('●') : ' '} ${bold(t.name)} ${dim(`${t.description} [${t.connectors.join(', ') || 'no tools'}]${t.dataClass === 'sensitive' ? (hostModel ? ` sensitive: runs only on ${hostModel}, pick it with /model` : ' sensitive: needs a second model host, see MODEL_HOST_URL in .env.example') : ''}`)}`)
-      } else if (argument === 'auto' || templates.some(t => t.name === argument)) { settings.agent = argument; say(dim(`  Requests go to: ${argument}`)) }
-      else say(red(`  No agent called "${argument}". /agent lists them.`))
+    case 'agent': {
+      const describe = (t: (typeof templates)[number]): string => `${t.description} [${t.connectors.join(', ') || 'no tools'}]${t.dataClass === 'sensitive' ? (hostModel ? ` sensitive: runs only on ${hostModel}, pick it with /model` : ' sensitive: needs a second model host, see MODEL_HOST_URL in .env.example') : ''}`
+      if (rest[0] === 'new') {
+        const created = agents.add(rest[1] ?? '', rest[2] ?? '', templates.map(t => t.name))
+        settings.agent = created.name
+        pendingPlan = undefined
+        say(`${green('✓')} ${bold(created.name)} is ready ${dim(`on ${created.template}. Type a task.`)}`)
+      } else if (rest[0] === 'remove') {
+        const gone = agents.get(rest[1] ?? '')
+        agents.remove(rest[1] ?? '')
+        if (gone) threads.delete(gone.name)
+        if (settings.agent?.toLowerCase() === gone?.name.toLowerCase()) { settings.agent = agents.list()[0]?.name; pendingPlan = undefined }
+        say(dim(`  Removed ${gone?.name}.${settings.agent ? ` Now talking to ${settings.agent}.` : ''}`))
+      } else if (argument) {
+        const chosen = agents.get(argument)
+        if (!chosen) throw new Error(`No agent called "${argument}". /agent lists them; /agent new <name> <template> creates one.`)
+        settings.agent = chosen.name
+        say(dim(`  Talking to ${chosen.name} (${chosen.template}).`))
+      } else {
+        if (agents.list().length === 0) say(dim('  No agents yet. Create one: /agent new <name> <template>'))
+        for (const a of agents.list()) say(`  ${settings.agent === a.name ? green('●') : ' '} ${bold(a.name)} ${dim(`${a.template}, since ${a.createdAt.slice(0, 10)}`)}`)
+        say(dim('\n  Templates an agent can be created on:'))
+        for (const t of templates) say(`    ${bold(t.name)} ${dim(describe(t))}`)
+      }
       break
+    }
     case 'model':
       if (MODELS.includes(argument)) { settings.model = argument; say(dim(`  Model: ${argument}`)) }
       else say(`  ${MODELS.map(m => m === settings.model ? bold(m) : m).join('   ')}`)
