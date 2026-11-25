@@ -7,7 +7,7 @@ import { Helmgear } from '@helmgear/sdk-client'
 it.skipIf(!process.env.DEEPSEEK_API_KEY)('answers one prompt on the agent profile with thinking off', async () => {
   await using harness = new Helmgear({
     helmgearHome: mkdtempSync(join(tmpdir(), 'helmgear-live-')),
-    model: 'deepseek-v4-flash',
+    model: 'deepseek-flash',
     reasoningEffort: 'off' as never,
   })
   const result = await harness.run('Reply with exactly the word: ready')

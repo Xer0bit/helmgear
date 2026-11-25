@@ -3,9 +3,9 @@ name: social-post
 description: Writes a social media post for the business, researching the topic when needed, and publishes or sends it when asked.
 metadata:
   helmgear:
-    connectors: [firecrawl, x, outbox, memory]
+    connectors: [firecrawl, x, outbox, memory, kb]
     dataClass: public
-    maxToolCalls: 4
+    maxToolCalls: 5
     persona: |
       You are a social media manager for a business. You write short, concrete posts in the business's voice.
       Research only when the request needs facts you were not given. X allows 280 characters and you cannot count exactly, so write a post for X in at most 240 characters: two or three short sentences. No hashtags unless asked.

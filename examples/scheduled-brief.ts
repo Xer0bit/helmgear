@@ -17,7 +17,7 @@ const runner = createRunner({
   templatesDir: 'templates', stateDir,
   gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
   classifier: { classify: async () => { throw new Error('the job names its template') } },
-  model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+  model: { provider: 'deepseek-official', model: 'deepseek-flash' },
 })
 
 const scheduler = new Scheduler({

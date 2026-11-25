@@ -42,7 +42,7 @@ function setup(overrides: Partial<RunnerOptions> & { run?: HarnessLike['run']; p
       describe: connectors => connectors.includes('outbox') ? [{ name: 'mcp__gateway__outbox__send', tier: 'send' as const, description: 'Send a message.' }] : [],
     },
     classifier: always('social-post'),
-    model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    model: { provider: 'deepseek-official', model: 'deepseek-flash' },
     harnessFactory(options) {
       const record: Started = { options, patch: readFileSync(options.patches![0]!, 'utf8'), closed: false, ran: [], order: ++clock }
       started.push(record)
@@ -71,7 +71,7 @@ it('routes, runs the template and returns the response with the session pending 
   expect(result).toMatchObject({ status: 'done', template: 'social-post', response: 'done it', pendingActionIds: [] })
   expect(started).toHaveLength(1)
   const { options, patch, ran } = started[0]!
-  expect(options).toMatchObject({ profile: 'agent', provider: 'deepseek-official', model: 'deepseek-v4-flash', reasoningEffort: 'low' })
+  expect(options).toMatchObject({ profile: 'agent', provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'low' })
   expect(ran).toEqual([{ request: 'draft a tweet', sessionId: (result as { sessionId: string }).sessionId }])
   expect(patch).not.toContain('x-helmgear')
 })
@@ -109,7 +109,7 @@ it('refuses a sensitive template on deepseek-official without starting a harness
   expect(result).toMatchObject({ status: 'refused' })
   expect((result as { reason: string }).reason).toContain('sensitive')
   expect(started).toHaveLength(0)
-  const elsewhere = setup({ classifier: always('email-triage'), model: { provider: 'eu-host', model: 'deepseek-v4-flash' } })
+  const elsewhere = setup({ classifier: always('email-triage'), model: { provider: 'eu-host', model: 'deepseek-flash' } })
   expect(await elsewhere.runner.runTask({ tenant: 'acme', request: 'triage this' })).toMatchObject({ status: 'done', template: 'email-triage' })
 })
 
@@ -375,4 +375,14 @@ it("grants the template's tool budget with the token", async () => {
   const { runner, grants } = setup()
   await runner.runTask({ tenant: 'acme', request: 'draft a tweet' })
   expect((grants[0] as { maxToolCalls?: number }).maxToolCalls).toBe(12)
+})
+
+it('does not repair or escalate when the check itself could not run', async () => {
+  let turns = 0
+  const down: Judge = { judge: async () => { throw new Error('fetch failed') } }
+  const { runner, started } = setup({ judge: down, run: async (_request, { sessionId }) => { turns++; return reply(sessionId, 'Here is the answer.') } })
+  const result = await runner.runTask({ tenant: 'acme', request: 'x' })
+  expect(result).toMatchObject({ status: 'done', verified: false, response: 'Here is the answer.', problems: ['verification failed: fetch failed'] })
+  expect(turns).toBe(1)
+  expect(started).toHaveLength(1)
 })

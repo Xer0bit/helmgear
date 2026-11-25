@@ -54,7 +54,7 @@ const runner = createRunner({
   stateDir,
   gateway: { ...gateway, approvals: core.approvals },
   classifier: jevClassifier({ apiKey: process.env.TYPESAFE_API_KEY! }),
-  model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+  model: { provider: 'deepseek-official', model: 'deepseek-flash' },
 })
 
 const result = await runner.runTask({ tenant: 'acme', request: 'Draft a post about our new invoice feature and send it to press@example.com' })
@@ -93,7 +93,7 @@ metadata:
 
 A `sensitive` template refuses to run on the provider `deepseek-official`, because that API stores request data in mainland China. Run those templates against another host of the model.
 
-Six templates ship: `social-post`, `outreach-research`, `lead-finder`, `competitor-brief`, `email-triage` and `bookkeeping-proposal`.
+Seven templates ship: `social-post`, `outreach-research`, `lead-finder`, `competitor-brief`, `knowledge-answer`, `email-triage` and `bookkeeping-proposal`.
 
 ## Connectors
 
@@ -134,6 +134,26 @@ const result = await runner.runTask({ tenant, template: planned.template, reques
 Every tool of these is held for approval, except MCP tools you mark `read` or `draft` in `connectors.json`. `mcpConnector` holds a tool by default because the gateway cannot know what a third-party tool does. A template uses a connector by naming it in `connectors`; a name with no connector behind it simply adds no tools. See `.env.example` for every setting.
 
 Each template also has a tool budget (`maxToolCalls`, default 12). The gateway counts the calls and refuses the rest, so a research task cannot run away.
+
+## Knowledge base
+
+Each tenant has its own knowledge base: the documents its agents may consult about the business.
+
+```ts
+import { KnowledgeBase, knowledgeConnector, teiEmbedder } from '@helmgear/knowledge'
+const kb = new KnowledgeBase({ dir: `${stateDir}/kb` })                       // keyword search
+// const kb = new KnowledgeBase({ dir, embedder: teiEmbedder({ url }) })      // plus embedding search
+await kb.add('acme', { title: 'Refund policy', source: 'refunds.md', text })  // same source again replaces it
+const connectors = [/* ... */, knowledgeConnector({ kb })]
+```
+
+- **A person decides what goes in.** Agents get `kb.search` and `kb.read`, both read-only. There is no tool that adds or edits a document, which is the defence against planted documents; no detector for those is reliable.
+- **Passages follow the document's own structure**: whole paragraphs grouped under their heading, indexed together with the document title and heading path.
+- **Search** is BM25 keyword search. Set `HELMGEAR_EMBEDDINGS_URL` to a text-embeddings-inference server and embedding similarity is fused in, which is what finds a passage worded differently from the question.
+- **Answers cite** the document and section. The `knowledge-answer` template answers only from the knowledge base and says so when it is silent; every other template lists `kb` and is told to check it before stating facts about the business.
+- In the console: `/kb add <file or URL> [title]`, `/kb list`, `/kb remove <n>`, `/kb search <question>`. Text formats only for now (`.md`, `.txt`, `.csv`, `.json`, `.html`, or a web page through Firecrawl).
+
+`pnpm eval --only kb` measures retrieval on a labelled question set, graded by code.
 
 ## Checked replies
 

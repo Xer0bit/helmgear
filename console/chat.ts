@@ -6,16 +6,19 @@
 // the gateway records it, the reply, and whether the reply matches that record.
 // Anything that would leave the machine is held until you /approve it.
 // "Send" writes a file under tmp/console/outbox; nothing really goes out.
+import { existsSync, readFileSync } from 'node:fs'
+import { basename, extname } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createCore, MemoryStore, startGateway, type PendingAction } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
 import { createRunner, type TaskResult } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
+import { KnowledgeBase, teiEmbedder } from '@helmgear/knowledge'
 import { connect } from './connectors.ts'
 
 const TENANT = 'console'
 const stateDir = 'tmp/console'
-const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro']
+const MODELS = ['deepseek-flash', 'deepseek-v4-pro']
 const EFFORTS: ReasoningEffort[] = ['off', 'low', 'high', 'max']
 const firecrawlUrl = (process.env.FIRECRAWL_URL ?? 'http://127.0.0.1:3002').replace(/\/+$/, '')
 
@@ -62,7 +65,8 @@ function step(mark: string, text: string): void {
 
 // ---- the system under test
 const memory = new MemoryStore(`${stateDir}/memory`)
-const connected = await connect(stateDir, memory)
+const kb = new KnowledgeBase({ dir: `${stateDir}/kb`, ...(process.env.HELMGEAR_EMBEDDINGS_URL ? { embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) } : {}) })
+const connected = await connect(stateDir, memory, kb)
 const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
 const gateway = await startGateway({ executor: core.executor, connectors })
@@ -79,7 +83,7 @@ let pendingPlan: { sessionId: string; template: string } | undefined
 const TOOL_WORDS: Record<string, string> = {
   'firecrawl.search': 'Searched the web', 'firecrawl.scrape': 'Read a web page', 'outbox.draft': 'Saved a draft',
   'outbox.send': 'Asked to send', 'memory.propose': 'Proposed something to remember',
-  'firecrawl.research': 'Researched the web', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
+  'firecrawl.research': 'Researched the web', 'kb.search': 'Searched the knowledge base', 'kb.read': 'Read a knowledge-base document', 'email.send': 'Asked to send an email', 'x.post': 'Asked to post on X',
 }
 const waiting = (): PendingAction[] => core.approvals.list(TENANT)
 
@@ -233,6 +237,7 @@ const HELP = `
   ${bold('/reject')} <n> [reason]    stop it; the reason becomes a lesson for that agent
   ${bold('/memory')}                 what the agents know about the business
   ${bold('/remember')} <fact>        add a fact      ${bold('/forget')} <n>   remove one
+  ${bold('/kb')}                     the knowledge base: /kb add <file or URL> [title], /kb list, /kb remove <n>, /kb search <question>
   ${bold('/record')}                 the gateway's latest decisions
   ${bold('/status')}                 connections and current settings
   ${bold('/new')}                    start a fresh conversation
@@ -307,6 +312,41 @@ async function command(line: string): Promise<boolean> {
       if (!entry) throw new Error(`There is no memory entry "${argument}". /memory lists them.`)
       memory.remove(TENANT, entry.id)
       say(dim('  Forgotten.'))
+      break
+    }
+    case 'kb': {
+      const [action, ...words] = rest
+      if (action === 'add' && words[0]) {
+        const [target, ...titleWords] = words as [string, ...string[]]
+        let text: string
+        if (/^https?:\/\//.test(target)) {
+          // A web page is read through Firecrawl, which returns it as Markdown.
+          const response = await fetch(`${firecrawlUrl}/v2/scrape`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: target, formats: ['markdown'] }), signal: AbortSignal.timeout(60_000) })
+          const page = await response.json() as { data?: { markdown?: string } }
+          if (!response.ok || !page.data?.markdown) throw new Error(`Could not read ${target} through Firecrawl (HTTP ${response.status}). Is it running? /status`)
+          text = page.data.markdown
+        } else {
+          if (!existsSync(target)) throw new Error(`No file at ${target}`)
+          if (!['.md', '.markdown', '.txt', '.csv', '.json', '.html', '.htm'].includes(extname(target).toLowerCase())) throw new Error('Only text files can be added for now: .md, .txt, .csv, .json, .html. Convert a PDF or Word file to text first.')
+          text = readFileSync(target, 'utf8')
+          if (/\.html?$/i.test(target)) text = text.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ')
+        }
+        const document = await kb.add(TENANT, { title: titleWords.join(' ') || basename(target).replace(/\.[^.]+$/, ''), source: target, text })
+        say(`${green('✓')} Added ${bold(document.title)} ${dim(`${document.chars.toLocaleString()} characters in ${document.chunks} passages. Agents can search it now.`)}`)
+      } else if (action === 'remove' && words[0]) {
+        const document = kb.list(TENANT)[Number(words[0]) - 1]
+        if (!document) throw new Error(`There is no document "${words[0]}". /kb list shows them.`)
+        kb.remove(TENANT, document.id)
+        say(dim(`  Removed ${document.title}.`))
+      } else if (action === 'search' && words.length > 0) {
+        const hits = await kb.search(TENANT, words.join(' '))
+        if (hits.length === 0) say(dim('  Nothing in the knowledge base matches.'))
+        for (const hit of hits) say(`  ${bold(hit.section ? (hit.section.startsWith(hit.title) ? hit.section : `${hit.title} › ${hit.section}`) : hit.title)} ${dim(`(${hit.score.toFixed(2)})`)}\n    ${hit.text.replace(/\s+/g, ' ').slice(0, 220)}`)
+      } else {
+        const documents = kb.list(TENANT)
+        if (documents.length === 0) say(dim('  The knowledge base is empty. /kb add <file or URL> [title] adds a document.'))
+        documents.forEach((document, i) => { say(`  [${i + 1}] ${bold(document.title)} ${dim(`${document.chars.toLocaleString()} characters, ${document.chunks} passages, from ${document.source}, added ${document.addedAt.slice(0, 10)}`)}`) })
+      }
       break
     }
     case 'record':

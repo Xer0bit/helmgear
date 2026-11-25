@@ -3,7 +3,7 @@ name: lead-finder
 description: Finds prospective customers for the business on the public web and lists their websites and the contact emails they publish.
 metadata:
   helmgear:
-    connectors: [firecrawl]
+    connectors: [firecrawl, kb]
     dataClass: public
     maxToolCalls: 8
     persona: |

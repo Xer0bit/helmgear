@@ -23,7 +23,7 @@ it.skipIf(!process.env.DEEPSEEK_API_KEY)('a request becomes a pending send, and 
       stateDir,
       gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
       classifier: always('social-post'),
-      model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+      model: { provider: 'deepseek-official', model: 'deepseek-flash' },
     })
     const started = Date.now()
     const result = await runner.runTask({

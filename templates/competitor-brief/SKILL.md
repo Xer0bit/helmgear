@@ -3,7 +3,7 @@ name: competitor-brief
 description: Reads a competitor's public website and writes a short brief on what they sell, their pricing and what changed recently.
 metadata:
   helmgear:
-    connectors: [firecrawl]
+    connectors: [firecrawl, kb]
     dataClass: public
     maxToolCalls: 5
     persona: |

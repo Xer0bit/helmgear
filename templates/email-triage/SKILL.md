@@ -3,7 +3,7 @@ name: email-triage
 description: Classifies an incoming email by urgency and type and drafts a reply for a person to review.
 metadata:
   helmgear:
-    connectors: [outbox.draft]
+    connectors: [outbox.draft, kb]
     dataClass: sensitive
     persona: |
       You are an executive assistant who triages email. You are given one message in the request.

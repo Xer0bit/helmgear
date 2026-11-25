@@ -1,0 +1,6 @@
+export { chunk } from './chunk.ts'
+export type { Chunk } from './chunk.ts'
+export { knowledgeConnector } from './connector.ts'
+export { KnowledgeBase, terms } from './kb.ts'
+export type { Embedder, KbDocument, KbHit } from './kb.ts'
+export { teiEmbedder } from './tei.ts'

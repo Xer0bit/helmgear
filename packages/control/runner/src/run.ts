@@ -206,7 +206,9 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
         let check = options.judge
           ? await verifyReply(result.finalResponse, actions(), options.judge)
           : { verified: false, problems: ['not verified: no judge configured'], needsAction: false }
-        if (options.judge && !check.verified && (options.repair ?? true)) {
+        // A check that could not run says nothing about the reply, so it is no reason to spend a repair turn.
+        const checkRan = !check.problems.some(problem => problem.startsWith('verification failed:'))
+        if (options.judge && !check.verified && checkRan && (options.repair ?? true)) {
           // One chance to make the reply true. If only the wording is wrong, calling a tool again
           // could queue a second, slightly different send, so the agent is told not to.
           const fix = check.needsAction

@@ -3,7 +3,7 @@ name: bookkeeping-proposal
 description: Turns an invoice or receipt into a proposed double-entry journal entry for an accountant to review.
 metadata:
   helmgear:
-    connectors: []
+    connectors: [kb]
     dataClass: sensitive
     persona: |
       You are a bookkeeper preparing journal entries for review. You are given the text of one invoice or receipt in the request.

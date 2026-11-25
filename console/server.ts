@@ -10,17 +10,19 @@ import { createCore, MemoryStore, startGateway } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
 import { createRunner } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
+import { KnowledgeBase, teiEmbedder } from '@helmgear/knowledge'
 import { connect } from './connectors.ts'
 
 const PORT = Number(process.env.PORT ?? 4317)
 const TENANT = 'console'
 const stateDir = 'tmp/console'
-const MODELS = ['deepseek-v4-flash', 'deepseek-v4-pro']
+const MODELS = ['deepseek-flash', 'deepseek-v4-pro']
 const EFFORTS = ['off', 'low', 'high', 'max']
 const firecrawlUrl = (process.env.FIRECRAWL_URL ?? 'http://127.0.0.1:3002').replace(/\/+$/, '')
 
 const memory = new MemoryStore(`${stateDir}/memory`)
-const connected = await connect(stateDir, memory)
+const kb = new KnowledgeBase({ dir: `${stateDir}/kb`, ...(process.env.HELMGEAR_EMBEDDINGS_URL ? { embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) } : {}) })
+const connected = await connect(stateDir, memory, kb)
 const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
 const gateway = await startGateway({ executor: core.executor, connectors })

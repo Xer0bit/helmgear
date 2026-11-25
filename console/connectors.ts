@@ -5,13 +5,17 @@
 //   others any MCP server listed in connectors.json (see connectors.example.json)
 import { existsSync, readFileSync } from 'node:fs'
 import { firecrawlConnector, mcpConnector, memoryConnector, outboxConnector, smtpConnector, xConnector, type Connector, type McpConnectorOptions, type MemoryStore } from '@helmgear/gateway'
+import { knowledgeConnector, type KnowledgeBase } from '@helmgear/knowledge'
 
 export interface Connected { connectors: Connector[]; lines: string[]; close(): Promise<void> }
 
-export async function connect(stateDir: string, memory: MemoryStore): Promise<Connected> {
+export async function connect(stateDir: string, memory: MemoryStore, kb: KnowledgeBase): Promise<Connected> {
   const env = process.env
-  const connectors: Connector[] = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory })]
+  const connectors: Connector[] = [firecrawlConnector(), outboxConnector({ dir: `${stateDir}/outbox` }), memoryConnector({ store: memory }), knowledgeConnector({ kb })]
   const lines: string[] = []
+  lines.push(env.HELMGEAR_EMBEDDINGS_URL
+    ? `on   knowledge base: keyword plus embedding search (${env.HELMGEAR_EMBEDDINGS_URL})`
+    : 'on   knowledge base: keyword search; set HELMGEAR_EMBEDDINGS_URL to add embedding search')
   const closers: (() => Promise<void>)[] = []
 
   if (env.SMTP_HOST && env.SMTP_FROM) {

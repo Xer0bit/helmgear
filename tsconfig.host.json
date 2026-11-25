@@ -134,6 +134,7 @@
     { "path": "./packages/bundle/agent" },
     { "path": "./packages/control/template" },
     { "path": "./packages/control/gateway" },
+    { "path": "./packages/control/knowledge" },
     { "path": "./packages/control/router" },
     { "path": "./packages/control/runner" },
     { "path": "./packages/control/scheduler" },

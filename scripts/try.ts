@@ -23,7 +23,7 @@ try {
     templatesDir: 'templates', stateDir,
     gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
     classifier: jevClassifier({ apiKey: process.env.TYPESAFE_API_KEY ?? '' }),
-    model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    model: { provider: 'deepseek-official', model: 'deepseek-flash' },
     memory,
   })
   const started = Date.now()

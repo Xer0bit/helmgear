@@ -27,3 +27,26 @@ it('jevJudge throws on an HTTP error or a missing answer, without the key in the
   expect((denied as Error).message).not.toContain('key-abc')
   await expect(jevJudge({ apiKey: 'k', fetch: fakeFetch({ answers: {} }).fetch }).judge('x', { a: 'A?' })).rejects.toThrow(/unexpected/)
 })
+
+it('retries once when the request fails to connect or the service is briefly unavailable, then gives up', async () => {
+  let calls = 0
+  const flaky = (async () => {
+    if (++calls === 1) throw new TypeError('fetch failed')
+    return new Response(JSON.stringify({ answers: { a: { type: 'noul', noul: 0.4 } } }))
+  }) as typeof globalThis.fetch
+  expect(await jevJudge({ apiKey: 'k', fetch: flaky }).judge('x', { a: 'A?' })).toEqual({ a: 0.4 })
+  expect(calls).toBe(2)
+  calls = 0
+  const busy = (async () => { calls++; return new Response('{}', { status: calls === 1 ? 503 : 200 }) }) as typeof globalThis.fetch
+  await expect(jevJudge({ apiKey: 'k', fetch: busy }).judge('x', { a: 'A?' })).rejects.toThrow(/unexpected/)
+  expect(calls).toBe(2)
+  calls = 0
+  const dead = (async () => { calls++; throw new TypeError('fetch failed') }) as typeof globalThis.fetch
+  await expect(jevJudge({ apiKey: 'k', fetch: dead }).judge('x', { a: 'A?' })).rejects.toThrow('fetch failed')
+  expect(calls).toBe(2)
+  // A refusal such as a bad key is not retried.
+  calls = 0
+  const denied = (async () => { calls++; return new Response('{}', { status: 401 }) }) as typeof globalThis.fetch
+  await expect(jevJudge({ apiKey: 'k', fetch: denied }).judge('x', { a: 'A?' })).rejects.toThrow(/401/)
+  expect(calls).toBe(1)
+})

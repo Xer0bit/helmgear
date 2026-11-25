@@ -543,6 +543,7 @@
       "@helmgear/agent-app": ["./packages/bundle/agent/src"],
       "@helmgear/template": ["./packages/control/template/src"],
       "@helmgear/gateway": ["./packages/control/gateway/src"],
+      "@helmgear/knowledge": ["./packages/control/knowledge/src"],
       "@helmgear/router": ["./packages/control/router/src"],
       "@helmgear/runner": ["./packages/control/runner/src"],
       "@helmgear/scheduler": ["./packages/control/scheduler/src"],

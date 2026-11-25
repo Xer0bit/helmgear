@@ -48,7 +48,7 @@ if (command === 'run') {
     gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
     // The template is named outright, so nothing is routed and no classifier is called.
     classifier: { classify: async () => { throw new Error('routing is not used here') } },
-    model: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+    model: { provider: 'deepseek-official', model: 'deepseek-flash' },
     memory,
   })
   const started = Date.now()

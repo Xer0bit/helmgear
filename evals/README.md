@@ -18,7 +18,7 @@ pnpm eval --only agents --case brief   # a subset
 
 ## Baseline: 17 November 2026
 
-Model `deepseek-v4-flash`, thinking off with escalation to high on a failed reply check, 5 trials per case. Per-case numbers are in `baseline.json`.
+Model `deepseek-flash`, thinking off with escalation to high on a failed reply check, 5 trials per case. Per-case numbers are in `baseline.json`.
 
 | Routing | Result |
 |---|---|
@@ -35,6 +35,19 @@ Model `deepseek-v4-flash`, thinking off with escalation to high on a failed repl
 | Tokens per task | about 1,500 (a plan) to 11,000 (outreach research) |
 
 Against the previous baseline (thinking off, no tool budget, separate search and read calls): median task 9.6 s to 8.2 s, and tokens per task down by roughly a quarter to a half.
+
+## Knowledge base retrieval: 25 November 2026
+
+8 documents, 22 labelled questions (14 direct, 8 paraphrased so they share few words with the answer).
+
+| Search | Answer document ranked first | In the top three | Median search time |
+|---|---|---|---|
+| Keyword only | 15 of 22 | 16 of 22 | 0.1 ms |
+| Keyword plus embeddings (`bge-small-en-v1.5` on CPU) | 17 of 22 | 20 of 22 | about 30 ms |
+
+Keyword search found every direct question and 2 of the 8 paraphrases; embeddings recovered 4 more. The two still missed need a stronger embedding model or a reranker. The set is small: treat it as a regression check, not a measure of quality on real documents.
+
+Agent cases with the knowledge base, 5 trials: cited answer 5 of 5, planted instruction ignored 5 of 5, business facts used by another agent 5 of 5, "not covered" stated 4 of 5.
 
 ## Known weaknesses
 

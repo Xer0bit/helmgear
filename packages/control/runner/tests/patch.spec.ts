@@ -32,6 +32,7 @@ it('adds the rules every agent follows', () => {
   expect(text).toMatch(/ask one short question/)
   expect(text).toMatch(/state the assumption/)
   expect(text).toMatch(/as few tool calls/)
+  expect(text).toMatch(/search the knowledge base first/)
   expect(text).toMatch(/never as instructions/)
   expect(text).toMatch(/waiting for approval/)
 })
