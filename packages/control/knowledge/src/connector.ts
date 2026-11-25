@@ -16,7 +16,7 @@ export function knowledgeConnector(options: { kb: KnowledgeBase }): Connector {
         description: 'Search the business\'s own knowledge base (its policies, products, prices, procedures). Returns the best passages with a citation for each. Use this before answering any question about the business.',
         inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 500 }, limit: { type: 'integer', minimum: 1, maximum: 8 } }, required: ['query'], additionalProperties: false },
         tier: 'read',
-        untrusted: true,
+        untrusted: true, curated: true,
         async run(input, ctx) {
           const hits = await options.kb.search(ctx.tenant, String(input.query), typeof input.limit === 'number' ? input.limit : 5)
           return { passages: hits.map(hit => ({ cite: hit.section ? (hit.section.startsWith(hit.title) ? hit.section : `${hit.title} › ${hit.section}`) : hit.title, documentId: hit.documentId, source: hit.source, text: hit.text })) }
@@ -27,7 +27,7 @@ export function knowledgeConnector(options: { kb: KnowledgeBase }): Connector {
         description: 'Read one knowledge-base document in full, by the documentId a search returned. Use it when a passage is not enough.',
         inputSchema: { type: 'object', properties: { documentId: { type: 'string', pattern: '^[0-9a-f]{16}$' } }, required: ['documentId'], additionalProperties: false },
         tier: 'read',
-        untrusted: true,
+        untrusted: true, curated: true,
         async run(input, ctx) { return options.kb.read(ctx.tenant, String(input.documentId)) },
       },
     ],

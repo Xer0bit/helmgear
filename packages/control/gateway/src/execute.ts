@@ -80,7 +80,13 @@ export class Executor {
     let result: CallResult
     if (entry.def.tier === 'send') {
       // The queue audits `pending` itself, before it stores the action.
-      this.options.queue.enqueue({ actionId: key, tool, input, payloadSha256: hash, ctx })
+      // What outside content this session had read when it asked: the approver should know that a page or
+      // an email could have put the idea there. Taken from the audit log, so the agent cannot hide it.
+      // ponytail: linear scan of the audit log per held action; index by session if the log grows large.
+      const read = [...new Set(this.options.audit.read()
+        .filter(e => e.event === 'executed' && e.tenant === ctx.tenant && e.sessionId === ctx.sessionId && this.tools.get(e.tool)?.def.untrusted && !this.tools.get(e.tool)?.def.curated)
+        .map(e => e.tool))]
+      this.options.queue.enqueue({ actionId: key, tool, input, payloadSha256: hash, ctx, ...(read.length ? { untrustedSources: read } : {}) })
       result = { status: 'pending', actionId: key }
     } else {
       try {

@@ -3,6 +3,20 @@ import type { RiskTier, Template } from '@helmgear/template'
 /** One tool as the agent sees it. */
 export interface ToolInfo { name: string; tier: RiskTier; description: string }
 
+/**
+ * A model host other than DeepSeek's own API: any server that speaks the
+ * OpenAI chat-completions protocol (Fireworks, Together, Groq, OpenRouter, a
+ * local vLLM or Ollama). The key is read from the named environment variable.
+ */
+export interface ModelHost {
+  baseURL: string
+  apiKeyEnv: string
+  /** Default 131,072 tokens. */
+  contextWindow?: number
+  /** Default 8,192 tokens. */
+  maxTokens?: number
+}
+
 /** The behaviour every agent shares, whatever its template says. */
 const RULES = `Rules for every task:
 - Do what the request asks and nothing else. No extra drafts, sends, memory proposals or side tasks nobody asked for.
@@ -25,7 +39,7 @@ const RULES = `Rules for every task:
 export function templatePatch(
   template: Template,
   gateway: { url: string },
-  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined } = {},
+  extras: { memory?: string | undefined; tools?: ToolInfo[] | undefined; planning?: boolean | undefined; model?: { provider: string; model: string; host?: ModelHost | undefined } | undefined } = {},
 ): string {
   // A JSON string is a valid YAML double-quoted scalar, so every value is quoted that way.
   const q = (value: string): string => JSON.stringify(value)
@@ -37,6 +51,26 @@ export function templatePatch(
         .map(tool => `- ${tool.name} (${tool.tier === 'send' ? 'held for approval' : 'runs at once'}): ${tool.description}`).join('\n')}`)
   }
   if (extras.memory) sections.push(`What you know about this business (approved by a person; use it, do not repeat it back):\n${extras.memory}`)
+  const { model } = extras
+  // ponytail: a hosted model is declared without thinking levels, because each host spells them
+  // differently. Add `reasoningEfforts` here when a host with a thinking model is in use.
+  const host = model?.host
+    ? `
+- id: llm-gateways
+  config:
+    providers:
+      ${q(model.provider)}:
+        apiKeyEnv: ${q(model.host.apiKeyEnv)}
+        api: openai-completions
+        baseURL: ${q(model.host.baseURL)}
+        models:
+          - id: ${q(model.model)}
+            name: ${q(model.model)}
+            contextWindow: ${Math.trunc(model.host.contextWindow ?? 131_072)}
+            maxTokens: ${Math.trunc(model.host.maxTokens ?? 8192)}
+            reasoningEfforts: false
+`
+    : ''
   return `- id: system-prompt
   config:
     includeHarnessIdentity: false
@@ -47,7 +81,7 @@ export function templatePatch(
   config:
     includeDefaultRoots: false
     customSkillDirs: []
-
+${host}
 - insert:
     - id: mcp-gateway
       name: '@helmgear/mcp-client'

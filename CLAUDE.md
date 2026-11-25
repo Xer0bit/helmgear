@@ -21,7 +21,7 @@ Finish code changes with `pnpm typecheck` and the tests for the touched area. Ru
 
 ## Layout
 
-- `packages/control/`: the control plane (`template`, `gateway`, `router`, `runner`, `scheduler`).
+- `packages/control/`: the control plane (`template`, `gateway`, `router`, `runner`, `scheduler`, `knowledge`).
 - `packages/bundle/agent/`: the `agent` profile, the model loop underneath.
 - `templates/<name>/SKILL.md`: agent templates. `name` equals the folder name.
 - `evals/`: routing and agent cases, graded by code. `evals/baseline.json` is the regression baseline.

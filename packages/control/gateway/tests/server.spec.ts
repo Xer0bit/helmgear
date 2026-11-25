@@ -10,8 +10,8 @@ afterEach(async () => { for (const item of open.splice(0)) await item.close().ca
 
 const schema = { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] }
 function connectors(calls: unknown[]): Connector[] {
-  const tool = (name: string, tier: 'read' | 'send', untrusted = false) => ({
-    name, description: `does ${name}`, inputSchema: schema, tier, untrusted,
+  const tool = (name: string, tier: 'read' | 'send', untrusted = false, curated = false) => ({
+    name, description: `does ${name}`, inputSchema: schema, tier, untrusted, curated,
     async run(input: Record<string, unknown>) {
       calls.push(input)
       if (input.q === 'boom') throw new Error('upstream exploded')
@@ -21,6 +21,7 @@ function connectors(calls: unknown[]): Connector[] {
   return [
     { name: 'alpha', tools: [tool('alpha.read', 'read'), tool('alpha.web', 'read', true), tool('alpha.send', 'send')] },
     { name: 'beta', tools: [tool('beta.read', 'read')] },
+    { name: 'gamma', tools: [tool('gamma.kb', 'read', true, true), tool('gamma.send', 'send')] },
   ]
 }
 
@@ -149,4 +150,53 @@ it('stops serving tool calls once the grant\'s budget is used up, and tells the 
   expect(third.isError).toBe(true)
   expect(text(third)).toMatch(/budget.*used up/i)
   expect(calls).toHaveLength(2)
+})
+
+it('stops a call repeated a third time in one run, without running the tool again', async () => {
+  const { server, calls } = await gateway()
+  const mcp = await client(server)
+  const call = () => mcp.callTool({ name: 'alpha__read', arguments: { q: 'same' } })
+  expect((await call()).isError).toBeFalsy()
+  expect((await call()).isError).toBeFalsy() // a retry after a timeout still gets the first result
+  const third = await call()
+  expect(third.isError).toBe(true)
+  expect(text(third)).toMatch(/already made this exact call/)
+  expect(calls).toHaveLength(1)
+  expect((await mcp.callTool({ name: 'alpha__read', arguments: { q: 'different' } })).isError).toBeFalsy()
+})
+
+it('stops a failing call repeated a third time', async () => {
+  const { server, calls } = await gateway()
+  const mcp = await client(server)
+  for (let i = 0; i < 3; i++) await mcp.callTool({ name: 'alpha__read', arguments: { q: 'boom' } })
+  expect(calls).toHaveLength(2)
+})
+
+it('marks a held action with the outside content the session read before asking for it', async () => {
+  const { server, core } = await gateway()
+  const mcp = await client(server)
+  await mcp.callTool({ name: 'alpha__send', arguments: { q: 'before' } })
+  await mcp.callTool({ name: 'alpha__read', arguments: { q: 'trusted' } })
+  await mcp.callTool({ name: 'alpha__web', arguments: { q: 'page' } })
+  await mcp.callTool({ name: 'alpha__send', arguments: { q: 'after' } })
+  const [before, after] = core.approvals.list('t1')
+  expect(before!.untrustedSources).toBeUndefined()
+  expect(after!.untrustedSources).toEqual(['alpha.web'])
+  expect(core.audit.read().find(e => e.event === 'pending' && e.actionId === after!.actionId)!.detail).toBe('after reading alpha.web')
+})
+
+it('does not mark a held action for outside content another session read', async () => {
+  const { server, core } = await gateway()
+  await (await client(server)).callTool({ name: 'alpha__web', arguments: { q: 'page' } })
+  const other = await client(server, ['alpha'], server.grant({ tenant: 't1', sessionId: 's2', template: 'social-post', connectors: ['alpha'] }))
+  await other.callTool({ name: 'alpha__send', arguments: { q: 'x' } })
+  expect(core.approvals.list('t1')[0]!.untrustedSources).toBeUndefined()
+})
+
+it('content a person curated does not mark a held action', async () => {
+  const { server, core } = await gateway()
+  const mcp = await client(server, ['gamma'])
+  expect(text(await mcp.callTool({ name: 'gamma__kb', arguments: { q: 'policy' } }))).toMatch(/^Untrusted third-party content/)
+  await mcp.callTool({ name: 'gamma__send', arguments: { q: 'x' } })
+  expect(core.approvals.list('t1')[0]!.untrustedSources).toBeUndefined()
 })

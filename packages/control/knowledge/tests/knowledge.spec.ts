@@ -162,3 +162,67 @@ it('teiEmbedder puts the model\'s query instruction in front of a question, not 
   await base.search('acme', 'parcel dispatch')
   expect(seen.at(-1)).toEqual(['Represent this sentence for searching relevant passages: parcel dispatch'])
 })
+
+// ---- reranking and file formats
+import { spawnSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { docxXmlToText, extractText, htmlToText, teiReranker, type Reranker } from '../src/index.ts'
+
+it('a reranker has the last word on order, and search survives it failing', async () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'helmgear-kb-')), 'kb')
+  // Scores a passage by whether it mentions Rotterdam, whatever the first pass thought.
+  const reranker: Reranker = { rerank: async (_query, texts) => texts.map(text => text.includes('Rotterdam') ? 1 : 0) }
+  const ranked = new KnowledgeBase({ dir, reranker })
+  await ranked.add('acme', { title: 'Refunds', source: 'refunds.md', text: REFUNDS })
+  await ranked.add('acme', { title: 'Shipping', source: 'shipping.md', text: SHIPPING })
+  const plain = await new KnowledgeBase({ dir }).search('acme', 'how long do refunds take for orders')
+  expect(plain[0]!.title).toBe('Refunds')
+  const hits = await ranked.search('acme', 'how long do refunds take for orders')
+  expect(hits[0]!.text).toContain('Rotterdam')
+  expect(hits).toHaveLength(plain.length)
+  for (const rerank of [async () => { throw new Error('down') }, async () => [Number.NaN, 1, 2], async () => [1]] as Reranker['rerank'][]) {
+    expect(await new KnowledgeBase({ dir, reranker: { rerank } }).search('acme', 'how long do refunds take for orders')).toEqual(plain)
+  }
+})
+
+it('teiReranker posts the question with the texts and returns scores in input order', async () => {
+  let sent: any
+  const fake = (async (url: string, init: RequestInit) => {
+    sent = { url, body: JSON.parse(String(init.body)) }
+    return new Response(JSON.stringify([{ index: 1, score: 0.9 }, { index: 0, score: 0.1 }]))
+  }) as unknown as typeof fetch
+  expect(await teiReranker({ url: 'http://rerank.test/', fetch: fake }).rerank('q', ['a', 'b'])).toEqual([0.1, 0.9])
+  expect(sent).toEqual({ url: 'http://rerank.test/rerank', body: { query: 'q', texts: ['a', 'b'], truncate: true } })
+  const down = (async () => new Response('no', { status: 503 })) as unknown as typeof fetch
+  await expect(teiReranker({ url: 'http://rerank.test', fetch: down }).rerank('q', ['a'])).rejects.toThrow(/503/)
+})
+
+it('reads Word paragraphs as lines and Word headings as Markdown headings', () => {
+  const xml = '<w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Refund policy</w:t></w:r></w:p>'
+    + '<w:p w:rsidR="1"><w:r><w:t>We refund within </w:t></w:r><w:r><w:t>30 days &amp; no later.</w:t></w:r></w:p></w:body>'
+  expect(docxXmlToText(xml)).toBe('# Refund policy\n\nWe refund within 30 days & no later.')
+  expect(chunk(docxXmlToText(xml))).toEqual([{ section: 'Refund policy', text: 'We refund within 30 days & no later.' }])
+})
+
+it('strips scripts, styles and tags from HTML', () => {
+  expect(htmlToText('<style>p{}</style><p>Open &amp; ready</p><script>evil()</script>').trim()).toBe('Open & ready')
+})
+
+it('extractText reads text files, refuses unknown formats and missing files, and survives a bad entity', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'helmgear-x-'))
+  writeFileSync(join(dir, 'a.md'), '# Hi')
+  expect(await extractText(join(dir, 'a.md'))).toBe('# Hi')
+  await expect(extractText(join(dir, 'a.xlsx'))).rejects.toThrow(/cannot read \.xlsx/)
+  await expect(extractText(join(dir, '*.md'))).rejects.toThrow(/no file at/)
+  expect(htmlToText('a&#99999999;b')).toBe('a&#99999999;b')
+})
+
+it.skipIf(spawnSync('pdftotext', ['-v']).error)('extractText reads the text of a PDF', async () => {
+  const stream = 'BT /F1 18 Tf 72 720 Td (Refunds take seven days.) Tj ET'
+  const pdf = `%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n`
+    + `3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj\n`
+    + `4 0 obj<</Length ${stream.length}>>stream\n${stream}\nendstream endobj\n5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n`
+  const file = join(mkdtempSync(join(tmpdir(), 'helmgear-x-')), 'policy.pdf')
+  writeFileSync(file, pdf)
+  expect(await extractText(file)).toContain('Refunds take seven days.')
+})

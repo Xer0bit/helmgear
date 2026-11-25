@@ -40,7 +40,7 @@ export async function startGateway(options: {
   port?: number
 }): Promise<GatewayServer> {
   // Keyed by the token's hash, so a lookup does not compare secret bytes.
-  const grants = new Map<string, Grant & { used: number }>()
+  const grants = new Map<string, Grant & { used: number; seen: Map<string, number> }>()
 
   const handler = createMcpHandler((request) => {
     const ctx = grants.get(fingerprint(bearer(request.requestInfo?.headers.get('authorization'))))
@@ -64,6 +64,11 @@ export async function startGateway(options: {
       // The same call repeated in one session is one action: a model that retries after a
       // timeout gets the first result instead of sending twice.
       const key = createHash('sha256').update([ctx.tenant, ctx.sessionId, name, canonicalJson(input)].join('\n')).digest('hex')
+      // A model stuck in a loop repeats itself. The second identical call is allowed (a retry after a
+      // timeout gets the first result); the third is stopped here, whether the earlier ones worked or failed.
+      const times = (ctx.seen.get(key) ?? 0) + 1
+      ctx.seen.set(key, times)
+      if (times > 2) return say('You have already made this exact call twice and the result will not change. Do not repeat it: use what you have, or try something different.', true)
       try {
         const result = await options.executor.call(name, input, { tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: ctx.connectors }, key)
         if (result.status === 'refused') return say(`Refused: ${result.reason}`, true)
@@ -98,7 +103,7 @@ export async function startGateway(options: {
     grant(ctx) {
       const token = randomBytes(32).toString('base64url')
       grants.set(fingerprint(token), {
-        tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: [...ctx.connectors], used: 0,
+        tenant: ctx.tenant, sessionId: ctx.sessionId, template: ctx.template, connectors: [...ctx.connectors], used: 0, seen: new Map(),
         ...(ctx.maxToolCalls === undefined ? {} : { maxToolCalls: ctx.maxToolCalls }),
       })
       return token

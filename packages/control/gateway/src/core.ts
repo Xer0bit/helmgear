@@ -27,6 +27,8 @@ export function createCore(options: {
       options.memory.add(action.ctx.tenant, {
         kind: 'lesson', source: 'rejection', template: action.ctx.template,
         text: `A person rejected a ${action.tool} because: ${why.slice(0, 200)}`,
+        // A lesson is about one moment; if it still matters in three months it belongs in the template or a fact.
+        expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(),
       })
     },
     run: (action) => {

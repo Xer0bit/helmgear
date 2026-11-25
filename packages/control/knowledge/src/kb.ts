@@ -33,6 +33,12 @@ export interface Embedder {
   embedQuery?(text: string): Promise<number[]>
 }
 
+/** Reads a question together with each candidate passage and scores how well the passage answers it. */
+export interface Reranker {
+  /** One score per text, in the order given; higher is better. */
+  rerank(query: string, texts: string[]): Promise<number[]>
+}
+
 interface StoredDocument { document: KbDocument; text: string; passages: { section: string; text: string; vector?: number[] }[] }
 interface Indexed { hit: Omit<KbHit, 'score'>; terms: Map<string, number>; length: number; vector?: number[] }
 interface Index { passages: Indexed[]; documentFrequency: Map<string, number>; averageLength: number }
@@ -72,11 +78,13 @@ const cosine = (a: number[], b: number[]): number => {
 export class KnowledgeBase {
   private readonly dir: string
   private readonly embedder: Embedder | undefined
+  private readonly reranker: Reranker | undefined
   private readonly cache = new Map<string, { stamp: string; index: Index }>()
 
-  constructor(options: { dir: string; embedder?: Embedder }) {
+  constructor(options: { dir: string; embedder?: Embedder; reranker?: Reranker }) {
     this.dir = options.dir
     this.embedder = options.embedder
+    this.reranker = options.reranker
   }
 
   private folder(tenant: string): string {
@@ -191,11 +199,21 @@ export class KnowledgeBase {
         if (vector) dense = passages.flatMap((p, i) => p.vector ? [{ i, score: cosine(vector, p.vector) }] : []).sort((x, y) => y.score - x.score).slice(0, 20)
       } catch { /* the embedding server is down: keyword search still answers */ }
     }
-    if (dense.length === 0) return keyword.slice(0, limit).map(({ i, score }) => ({ ...passages[i]!.hit, score }))
-
-    // Reciprocal rank fusion: a passage ranked high by either signal rises; one ranked by both rises most.
-    const fused = new Map<number, number>()
-    for (const list of [keyword, dense]) list.forEach(({ i }, rank) => fused.set(i, (fused.get(i) ?? 0) + 1 / (60 + rank + 1)))
-    return [...fused].sort((x, y) => y[1] - x[1]).slice(0, limit).map(([i, score]) => ({ ...passages[i]!.hit, score }))
+    let candidates = keyword
+    if (dense.length > 0) {
+      // Reciprocal rank fusion: a passage ranked high by either signal rises; one ranked by both rises most.
+      const fused = new Map<number, number>()
+      for (const list of [keyword, dense]) list.forEach(({ i }, rank) => fused.set(i, (fused.get(i) ?? 0) + 1 / (60 + rank + 1)))
+      candidates = [...fused].map(([i, score]) => ({ i, score })).sort((x, y) => y.score - x.score).slice(0, 20)
+    }
+    if (this.reranker && candidates.length > 1) {
+      // The first pass finds candidates cheaply; the reranker reads each one against the question and has the last word on order.
+      try {
+        const scores = await this.reranker.rerank(query, candidates.map(({ i }) => { const { title, section, text } = passages[i]!.hit; return `${title}\n${section}\n${text}` }))
+        if (!Array.isArray(scores) || scores.length !== candidates.length || !scores.every(Number.isFinite)) throw new Error('unusable scores')
+        candidates = candidates.map(({ i }, n) => ({ i, score: scores[n]! })).sort((x, y) => y.score - x.score)
+      } catch { /* the reranking server is down or answered nonsense: the first-pass order still answers */ }
+    }
+    return candidates.slice(0, limit).map(({ i, score }) => ({ ...passages[i]!.hit, score }))
   }
 }

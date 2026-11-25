@@ -72,6 +72,8 @@ core.approvals.reject(actionId, 'sam', 'wrong recipient')
 core.audit.read()                                 // pending -> approved -> executed
 ```
 
+A held action carries `untrustedSources`: the tools returning third-party content (a web page, a document) that the session had used before it asked. The list comes from the audit log, not from the agent. Show it to the approver, because a page can tell an agent to send something; no detector for that is reliable, so the person approving is the check.
+
 An approval is refused if the stored payload, tool, tenant or session no longer matches what the audit log recorded when the agent asked for it, or if the audit log has no such request. `runTask` gives up after `timeoutMs` (default five minutes); actions already queued stay queued.
 
 ## Templates
@@ -91,7 +93,17 @@ metadata:
 ---
 ```
 
-A `sensitive` template refuses to run on the provider `deepseek-official`, because that API stores request data in mainland China. Run those templates against another host of the model.
+A `sensitive` template refuses to run on the provider `deepseek-official`, because that API stores request data in mainland China. Run those templates against another host of the model:
+
+```ts
+createRunner({ /* ... */, model: {
+  provider: 'my-host',                        // a name you choose
+  model: 'the-model-id-that-host-uses',
+  host: { baseURL: 'https://host.example/v1', apiKeyEnv: 'MODEL_HOST_API_KEY' },   // any OpenAI-compatible server
+} })
+```
+
+The agent process receives that one key and no thinking level is requested from a hosted model. Naming DeepSeek's own API as the host does not lift the refusal. In the console and the evals, set `MODEL_HOST_URL`, `MODEL_HOST_MODEL` and `MODEL_HOST_API_KEY` in `.env`, then pick the model with `/model` or run `pnpm eval --host`.
 
 Seven templates ship: `social-post`, `outreach-research`, `lead-finder`, `competitor-brief`, `knowledge-answer`, `email-triage` and `bookkeeping-proposal`.
 
@@ -133,7 +145,7 @@ const result = await runner.runTask({ tenant, template: planned.template, reques
 
 Every tool of these is held for approval, except MCP tools you mark `read` or `draft` in `connectors.json`. `mcpConnector` holds a tool by default because the gateway cannot know what a third-party tool does. A template uses a connector by naming it in `connectors`; a name with no connector behind it simply adds no tools. See `.env.example` for every setting.
 
-Each template also has a tool budget (`maxToolCalls`, default 12). The gateway counts the calls and refuses the rest, so a research task cannot run away.
+Each template also has a tool budget (`maxToolCalls`, default 12). The gateway counts the calls and refuses the rest, so a research task cannot run away. It also stops a loop: the same call with the same input is answered from the first result the second time and refused the third time.
 
 ## Knowledge base
 
@@ -150,8 +162,10 @@ const connectors = [/* ... */, knowledgeConnector({ kb })]
 - **A person decides what goes in.** Agents get `kb.search` and `kb.read`, both read-only. There is no tool that adds or edits a document, which is the defence against planted documents; no detector for those is reliable.
 - **Passages follow the document's own structure**: whole paragraphs grouped under their heading, indexed together with the document title and heading path.
 - **Search** is BM25 keyword search. Set `HELMGEAR_EMBEDDINGS_URL` to a text-embeddings-inference server and embedding similarity is fused in, which is what finds a passage worded differently from the question.
+- **Reranking** is optional: pass `reranker: teiReranker({ url })` (console: `HELMGEAR_RERANKER_URL`) and a reranking model reads the top 20 candidates against the question and sets the final order. If that server is down, the first-pass order is used.
+- **Files**: `extractText(file)` reads `.md`, `.txt`, `.csv`, `.json`, `.html`, `.pdf` (needs `pdftotext` from poppler-utils) and `.docx` (needs `unzip`). A scanned PDF has no text layer and is refused as empty.
 - **Answers cite** the document and section. The `knowledge-answer` template answers only from the knowledge base and says so when it is silent; every other template lists `kb` and is told to check it before stating facts about the business.
-- In the console: `/kb add <file or URL> [title]`, `/kb list`, `/kb remove <n>`, `/kb search <question>`. Text formats only for now (`.md`, `.txt`, `.csv`, `.json`, `.html`, or a web page through Firecrawl).
+- In the console: `/kb add <file or URL> [title]`, `/kb list`, `/kb remove <n>`, `/kb search <question>`. A file can be text, HTML, PDF or Word; a URL is read through Firecrawl.
 
 `pnpm eval --only kb` measures retrieval on a labelled question set, graded by code.
 
@@ -166,6 +180,8 @@ const result = await runner.runTask({ tenant: 'acme', request: '...' })
 // result.actions   what the gateway recorded for this run: trust this
 // result.verified  true only when the reply claims nothing the record does not support
 // result.problems  what did not match
+// result.report    the actions in plain lines by outcome, written from the record:
+//                  "Done: firecrawl.research ×2\nWaiting for your approval: email.send"
 ```
 
 When they disagree, the agent gets one turn to fix the reply or make the missing tool call. Without a judge, `verified` is `false`.
@@ -184,7 +200,8 @@ memory.add('acme', { kind: 'fact', text: 'Our product is called Tidewater.', sou
 
 - **Facts.** A template that lists `memory` in its connectors can propose a fact with `memory.propose`. The proposal waits in the approval queue like a send, so text an agent read on a web page cannot become memory unless you approve it.
 - **Lessons.** When you reject an action with a reason, the reason is stored for that tenant and template, and later runs see it.
-- Both are added to the agent's instructions, newest first, up to 2,000 characters.
+- Both are added to the agent's instructions, newest first, up to 2,000 characters. Lessons get at most 30% of that, so a run of rejections cannot push the facts out.
+- **Expiry.** An entry with `expiresAt` stops being shown after that moment. A lesson expires after 90 days; a fact never does unless you set a date. `memory.update(tenant, id, text)` corrects one entry in place.
 
 ## Many tasks, and scheduled tasks
 
@@ -217,7 +234,7 @@ pnpm test          # unit tests
 pnpm test:e2e      # live tests; each skips itself when its key is missing
 ```
 
-The control plane lives in `packages/control/` (`template`, `gateway`, `router`, `runner`). The model loop underneath is the `agent` profile in `packages/bundle/agent/`.
+The control plane lives in `packages/control/` (`template`, `gateway`, `router`, `runner`, `scheduler`, `knowledge`). The model loop underneath is the `agent` profile in `packages/bundle/agent/`.
 
 ## Contributing
 

@@ -16,15 +16,17 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCore, firecrawlConnector, memoryConnector, MemoryStore, outboxConnector, startGateway, xConnector, type AuditEntry, type MemoryEntry, type PendingAction } from '@helmgear/gateway'
-import { KnowledgeBase, knowledgeConnector, teiEmbedder } from '@helmgear/knowledge'
+import { KnowledgeBase, knowledgeConnector, teiEmbedder, teiReranker } from '@helmgear/knowledge'
 import { jevClassifier, jevJudge, route } from '@helmgear/router'
-import { createRunner, type TaskResult } from '@helmgear/runner'
+import { createRunner, modelHostFromEnv, type TaskResult } from '@helmgear/runner'
 import { loadTemplates } from '@helmgear/template'
 import { KB_DOCS, KB_PLANTED, KB_QUESTIONS } from './kb-fixture.ts'
 
 const argv = process.argv.slice(2)
 const flag = (name: string): string | undefined => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined }
 const TRIALS = Number(flag('--trials') ?? 3)
+// `--host` runs the agent cases on the second model host from .env (MODEL_HOST_URL and friends) instead of DeepSeek's API.
+const MODEL = argv.includes('--host') ? modelHostFromEnv() ?? (() => { throw new Error('--host needs MODEL_HOST_URL and MODEL_HOST_MODEL in .env') })() : { provider: 'deepseek-official', model: 'deepseek-flash' }
 const ONLY = flag('--only')
 const CASE = flag('--case')
 const CONCURRENCY = 4
@@ -88,6 +90,9 @@ interface Outcome {
   memory: MemoryEntry[]
   drafts: { to?: string; subject?: string; body?: string }[]
   tokens: number
+  /** Input tokens billed in full, and input tokens the provider served from its prompt cache. */
+  freshInput: number
+  cachedInput: number
 }
 interface Check { name: string; pass: (o: Outcome) => boolean }
 interface Case { id: string; template: string; variant: Variant; request: string; checks: Check[]; seedMemory?: string[]; mode?: 'plan'
@@ -367,7 +372,7 @@ async function runCase(test: Case): Promise<Outcome> {
       templatesDir: 'templates', stateDir, timeoutMs: 180_000,
       gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
       classifier: { classify: async () => { throw new Error('agent cases name their template') } },
-      model: { provider: 'deepseek-official', model: 'deepseek-flash' },
+      model: MODEL,
       judge: jevJudge({ apiKey: process.env.TYPESAFE_API_KEY ?? '' }),
       memory,
     })
@@ -384,6 +389,8 @@ async function runCase(test: Case): Promise<Outcome> {
       fetched, seconds: (Date.now() - started) / 1000, memory: memory.list('eval'),
       drafts: readdirSync(join(outbox, 'drafts')).map(name => JSON.parse(readFileSync(join(outbox, 'drafts', name), 'utf8')) as Outcome['drafts'][number]),
       tokens: 'usage' in result ? result.usage.inputTokens + result.usage.cachedInputTokens + result.usage.outputTokens : 0,
+      freshInput: 'usage' in result ? result.usage.inputTokens : 0,
+      cachedInput: 'usage' in result ? result.usage.cachedInputTokens : 0,
     }
   } finally {
     await gateway.close()
@@ -446,7 +453,7 @@ async function pool<T, R>(items: T[], worker: (item: T) => Promise<R>): Promise<
   return results
 }
 const percentile = (values: number[], p: number): number => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * p))] ?? 0
-const report: Record<string, unknown> = { at: new Date().toISOString(), model: 'deepseek-flash', reasoningEffort: 'per template', trials: TRIALS }
+const report: Record<string, unknown> = { at: new Date().toISOString(), model: MODEL.model, reasoningEffort: 'per template', trials: TRIALS }
 let failed = false
 
 if (ONLY !== 'agents' && ONLY !== 'kb') {
@@ -500,14 +507,22 @@ if (!ONLY || ONLY === 'kb') {
   if (process.env.HELMGEAR_EMBEDDINGS_URL) {
     hybrid = await measure('keyword + embeddings', new KnowledgeBase({ dir: join(mkdtempSync(join(tmpdir(), 'helmgear-kbeval-')), 'kb'), embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) })).catch((error: Error) => { console.log(`keyword + embeddings: not measured (${error.message})`); return undefined })
   } else console.log('keyword + embeddings: not measured (set HELMGEAR_EMBEDDINGS_URL to an embedding server)')
-  report.kb = { questions: KB_QUESTIONS.length, keyword, ...(hybrid ? { hybrid } : {}) }
+  let reranked: Awaited<ReturnType<typeof measure>> | undefined
+  if (process.env.HELMGEAR_RERANKER_URL) {
+    const embedder = process.env.HELMGEAR_EMBEDDINGS_URL ? { embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) } : {}
+    // The reranker fails soft inside search, so check it answers before trusting the numbers.
+    reranked = await teiReranker({ url: process.env.HELMGEAR_RERANKER_URL }).rerank('ping', ['pong'])
+      .then(() => measure(`${process.env.HELMGEAR_EMBEDDINGS_URL ? 'keyword + embeddings' : 'keyword'} + reranker`, new KnowledgeBase({ dir: join(mkdtempSync(join(tmpdir(), 'helmgear-kbeval-')), 'kb'), ...embedder, reranker: teiReranker({ url: process.env.HELMGEAR_RERANKER_URL! }) })))
+      .catch((error: Error) => { console.log(`reranker: not measured (${error.message})`); return undefined })
+  } else console.log('reranker: not measured (set HELMGEAR_RERANKER_URL to a reranking server)')
+  report.kb = { questions: KB_QUESTIONS.length, keyword, ...(hybrid ? { hybrid } : {}), ...(reranked ? { reranked } : {}) }
 }
 
 if (ONLY !== 'routing' && ONLY !== 'kb') {
   const selected = CASES.filter(test => !CASE || test.id.includes(CASE))
   const jobs = selected.flatMap(test => Array.from({ length: TRIALS }, (_unused, trial) => ({ test, trial })))
   const outcomes = await pool(jobs, async ({ test, trial }) => ({ test, trial, outcome: await runCase(test) }))
-  console.log(`\n═══ Agent cases ═══  ${TRIALS} trials each, deepseek-flash, reasoning as each template sets it`)
+  console.log(`\n═══ Agent cases ═══  ${TRIALS} trials each, ${MODEL.model}, reasoning as each template sets it`)
   const summary = selected.map((test) => {
     const runs = outcomes.filter(o => o.test === test).map(o => o.outcome)
     const checks = test.checks.map(check => ({ name: check.name, passed: runs.filter(o => { try { return check.pass(o) } catch { return false } }).length }))
@@ -525,7 +540,11 @@ if (ONLY !== 'routing' && ONLY !== 'kb') {
   const allSeconds = outcomes.map(o => o.outcome.seconds)
   console.log(`\nChecks passed: ${passedChecks}/${totalChecks} (${(100 * passedChecks / totalChecks).toFixed(1)}%) · cases all-green in every trial: ${summary.filter(s => s.perfect === TRIALS).length}/${summary.length}`)
   console.log(`Latency per task: p50 ${percentile(allSeconds, 0.5).toFixed(1)} s · p95 ${percentile(allSeconds, 0.95).toFixed(1)} s · max ${Math.max(...allSeconds).toFixed(1)} s`)
-  report.agents = { passedChecks, totalChecks, p50s: percentile(allSeconds, 0.5), p95s: percentile(allSeconds, 0.95), cases: summary }
+  const fresh = outcomes.reduce((n, o) => n + o.outcome.freshInput, 0)
+  const cached = outcomes.reduce((n, o) => n + o.outcome.cachedInput, 0)
+  const cachedShare = fresh + cached ? cached / (fresh + cached) : 0
+  console.log(`Input tokens: ${(fresh + cached).toLocaleString()}, of which ${(100 * cachedShare).toFixed(0)}% came from the provider's prompt cache`)
+  report.agents = { passedChecks, totalChecks, p50s: percentile(allSeconds, 0.5), p95s: percentile(allSeconds, 0.95), cachedInputShare: cachedShare, cases: summary }
   if (summary.some(s => s.perfect < TRIALS)) failed = true
 }
 

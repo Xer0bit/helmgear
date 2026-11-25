@@ -18,6 +18,8 @@ export interface ToolDef {
   tier: RiskTier
   /** True when the result carries third-party content the model must not treat as instructions. */
   untrusted?: boolean
+  /** True when a person chose that content (a knowledge base). It is still data to the model, but reading it does not mark later held actions. */
+  curated?: boolean
   run(input: Record<string, unknown>, ctx: CallContext): Promise<unknown>
 }
 
@@ -35,4 +37,6 @@ export interface PendingRequest {
   input: Record<string, unknown>
   payloadSha256: string
   ctx: CallContext
+  /** Tools returning third-party content that this session had used before it asked for this action. */
+  untrustedSources?: string[]
 }

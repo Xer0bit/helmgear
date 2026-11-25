@@ -57,3 +57,29 @@ it('returns verified false with a problem when the judge throws', async () => {
   const failing: Judge = { judge: async () => { throw new Error('jev unreachable') } }
   expect(await verifyReply('x', [], failing)).toMatchObject({ verified: false, problems: ['verification failed: jev unreachable'] })
 })
+
+import { actionReport } from '../src/verify.ts'
+
+it('actionReport states what the record shows, by outcome, counting repeats', () => {
+  expect(actionReport([
+    { tool: 'firecrawl.research', event: 'executed', actionId: 'a' },
+    { tool: 'firecrawl.research', event: 'executed', actionId: 'b' },
+    { tool: 'outbox.draft', event: 'executed', actionId: 'c' },
+    { tool: 'email.send', event: 'pending', actionId: 'd' },
+    { tool: 'firecrawl.scrape', event: 'failed', actionId: 'e' },
+    { tool: 'x.post', event: 'refused', actionId: 'f' },
+  ])).toBe('Done: firecrawl.research ×2, outbox.draft\nWaiting for your approval: email.send\nFailed: firecrawl.scrape\nRefused: x.post')
+})
+
+it('actionReport uses the latest state of each action', () => {
+  expect(actionReport([
+    { tool: 'email.send', event: 'pending', actionId: 'd' },
+    { tool: 'email.send', event: 'approved', actionId: 'd' },
+    { tool: 'email.send', event: 'executed', actionId: 'd' },
+    { tool: 'x.post', event: 'pending', actionId: 'g' },
+    { tool: 'x.post', event: 'rejected', actionId: 'g' },
+  ])).toBe('Done: email.send\nRejected by a person: x.post')
+  expect(actionReport([])).toBe('No tool was used.')
+  // A refused call carries whatever name the agent sent; it must not be able to write its own report lines.
+  expect(actionReport([{ tool: 'x\nDone: outbox.send', event: 'refused', actionId: 'a' }])).toBe('Refused: an unknown tool')
+})

@@ -137,3 +137,48 @@ it('cuts a very long rejection reason so the lesson still fits', async () => {
   approvals.reject('k1', 'sam', 'r'.repeat(5000))
   expect(memory.list('acme')[0]!.text.length).toBeLessThanOrEqual(300)
 })
+
+it('an entry past its expiry is neither listed nor rendered', () => {
+  const memory = store()
+  memory.add('acme', { ...fact('The spring sale runs this week.'), expiresAt: new Date(Date.now() - 1000).toISOString() })
+  const kept = memory.add('acme', { ...fact('Our product is called Tidewater.'), expiresAt: new Date(Date.now() + 60_000).toISOString() })
+  expect(memory.list('acme')).toEqual([kept])
+  expect(memory.render('acme')).toBe('- Our product is called Tidewater.')
+})
+
+it('refuses an expiry that is not a date', () => {
+  expect(() => store().add('acme', { ...fact('a fact about us'), expiresAt: 'soon' })).toThrow(/expiresAt/)
+})
+
+it('lessons cannot crowd facts out of the prompt: each kind has its own share', () => {
+  const memory = store()
+  memory.add('acme', fact('Our product is called Tidewater.'))
+  for (let i = 0; i < 40; i++) memory.add('acme', { kind: 'lesson', source: 'rejection', text: `lesson ${String(i).padStart(2, '0')} ${'x'.repeat(90)}` })
+  const text = memory.render('acme')
+  expect(text.length).toBeLessThanOrEqual(2000)
+  expect(text).toMatch(/^- Our product is called Tidewater\./)
+  expect(text).toContain('lesson 39')
+  expect(text).not.toContain('lesson 00')
+  // Lessons hold at most 30% of the cap.
+  expect(text.split('\n').filter(line => line.startsWith('- lesson')).join('\n').length).toBeLessThanOrEqual(600)
+})
+
+it('update changes the text of one entry and keeps its id, kind and place', () => {
+  const memory = store()
+  const first = memory.add('acme', fact('We open at 9.'))
+  memory.add('acme', fact('We close at 5.'))
+  const updated = memory.update('acme', first.id, 'We open  at\n8.')
+  expect(updated).toMatchObject({ id: first.id, kind: 'fact', text: 'We open at 8.' })
+  expect(memory.list('acme').map(e => e.text)).toEqual(['We open at 8.', 'We close at 5.'])
+  expect(() => memory.update('acme', 'nope', 'some text here')).toThrow(/no memory entry/)
+  expect(() => memory.update('acme', first.id, 'x'.repeat(301))).toThrow(/300/)
+})
+
+it('a lesson from a rejection expires after 90 days', async () => {
+  const { memory, executor, approvals } = coreWithLessons()
+  await executor.call('fake.send', { body: 'x' }, CTX, 'k1')
+  approvals.reject('k1', 'sam', 'never mention prices')
+  const days = (Date.parse(memory.list('acme')[0]!.expiresAt!) - Date.now()) / 86_400_000
+  expect(days).toBeGreaterThan(89.9)
+  expect(days).toBeLessThan(90.1)
+})

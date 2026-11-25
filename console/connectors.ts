@@ -16,6 +16,10 @@ export async function connect(stateDir: string, memory: MemoryStore, kb: Knowled
   lines.push(env.HELMGEAR_EMBEDDINGS_URL
     ? `on   knowledge base: keyword plus embedding search (${env.HELMGEAR_EMBEDDINGS_URL})`
     : 'on   knowledge base: keyword search; set HELMGEAR_EMBEDDINGS_URL to add embedding search')
+  if (env.HELMGEAR_RERANKER_URL) lines.push(`on   knowledge base: results reranked (${env.HELMGEAR_RERANKER_URL})`)
+  lines.push(env.MODEL_HOST_URL && env.MODEL_HOST_MODEL
+    ? `on   second model host: ${env.MODEL_HOST_MODEL} at ${env.MODEL_HOST_URL}; pick it with /model to run sensitive agents`
+    : 'off  second model host: add MODEL_HOST_URL, MODEL_HOST_MODEL and MODEL_HOST_API_KEY to .env to run sensitive agents')
   const closers: (() => Promise<void>)[] = []
 
   if (env.SMTP_HOST && env.SMTP_FROM) {

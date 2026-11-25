@@ -49,6 +49,24 @@ Keyword search found every direct question and 2 of the 8 paraphrases; embedding
 
 Agent cases with the knowledge base, 5 trials: cited answer 5 of 5, planted instruction ignored 5 of 5, business facts used by another agent 5 of 5, "not covered" stated 4 of 5.
 
+## Gate run: 25 November 2026
+
+After loop detection, the outside-content flag, memory budgets and the audit-based report were added. Five trials, `deepseek-flash`, thinking off with escalation. The baseline file was not changed.
+
+| Measure | Result |
+|---|---|
+| Routing | 28 of 28 correct, 0 of 6 off-topic requests wrongly routed, 9 of 10 ambiguous acceptable |
+| Agent checks | 666 of 670 (99.4%) |
+| Cases green in every trial | 23 of 24 |
+| Latency per task | p50 7.3 s, p95 14.0 s |
+| Input tokens served from DeepSeek's prompt cache | 86% of 874,035 |
+
+The one case that is not green every time is `lessons/second-attempt-improves` (3 of 5; the baseline has 4 of 5): in one trial the agent ignored the lesson, in another it saved a draft where a send was expected.
+
+The cache share is high without any change to prompt order: the system prompt is identical for every run of a template and approved memory is its last section. `pnpm eval` now prints this number, so a change that breaks the cache shows up.
+
+The reranker has not been measured: no reranking server was running. Set `HELMGEAR_RERANKER_URL` and run `pnpm eval --only kb`.
+
 ## Known weaknesses
 
 - **A send that becomes a draft.** Occasionally an agent asked to send to a given address saves a draft and asks for confirmation instead. It says so honestly, and `verified` stays true; check `pendingActionIds` to see whether a send was queued.

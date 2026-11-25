@@ -50,7 +50,7 @@ export class ApprovalQueue {
     if (existsSync(file)) return
     const { tenant, sessionId, template } = action.ctx
     // Audit first: a file with no audited request is never approvable.
-    this.audit.append({ tenant, sessionId, template, tool: action.tool, tier: 'send', event: 'pending', actionId: action.actionId, payloadSha256: action.payloadSha256 })
+    this.audit.append({ tenant, sessionId, template, tool: action.tool, tier: 'send', event: 'pending', actionId: action.actionId, payloadSha256: action.payloadSha256, ...(action.untrustedSources?.length ? { detail: `after reading ${action.untrustedSources.join(', ')}` } : {}) })
     const stored: PendingAction = { ...action, createdAt: new Date().toISOString() }
     writeFileSync(`${file}.tmp`, JSON.stringify(stored, null, 2), { mode: 0o600 })
     renameSync(`${file}.tmp`, file)

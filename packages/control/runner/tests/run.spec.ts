@@ -386,3 +386,55 @@ it('does not repair or escalate when the check itself could not run', async () =
   expect(turns).toBe(1)
   expect(started).toHaveLength(1)
 })
+
+// ---- a second model host
+const HOST = { baseURL: 'https://api.host.example/v1', apiKeyEnv: 'SECOND_HOST_KEY' }
+
+it('declares a model host in the patch, passes only its key, and runs a sensitive template there without asking for a thinking level', async () => {
+  process.env.SECOND_HOST_KEY = 'host-key-value'
+  process.env.UNRELATED_SECRET = 'nope'
+  process.env.DEEPSEEK_API_KEY = 'deepseek-key-value'
+  try {
+    const { runner, started } = setup({ classifier: always('email-triage'), model: { provider: 'eu-host', model: 'acme/deepseek', host: HOST } })
+    expect(await runner.runTask({ tenant: 'acme', request: 'triage this', reasoningEffort: 'high' })).toMatchObject({ status: 'done', template: 'email-triage' })
+    const { options, patch } = started[0]!
+    expect(patch).toContain('- id: llm-gateways')
+    expect(patch).toContain('"eu-host":')
+    expect(patch).toContain('baseURL: "https://api.host.example/v1"')
+    expect(patch).toContain('apiKeyEnv: "SECOND_HOST_KEY"')
+    expect(patch).not.toContain('host-key-value')
+    expect(options).toMatchObject({ provider: 'eu-host', model: 'acme/deepseek' })
+    expect(options.reasoningEffort).toBeUndefined()
+    expect(options.env!.SECOND_HOST_KEY).toBe('host-key-value')
+    expect(options.env!.UNRELATED_SECRET).toBeUndefined()
+    expect(options.env!.DEEPSEEK_API_KEY).toBeUndefined()
+  } finally { delete process.env.SECOND_HOST_KEY; delete process.env.UNRELATED_SECRET }
+})
+
+it('still refuses a sensitive template when the "host" is DeepSeek\'s own API under another name', async () => {
+  for (const baseURL of ['https://api.deepseek.com/v1', 'https://api.deepseek.com./v1', 'https://API.DeepSeek.com/v1']) {
+    const { runner, started } = setup({ classifier: always('email-triage'), model: { provider: 'my-host', model: 'deepseek-flash', host: { ...HOST, baseURL } } })
+    expect(await runner.runTask({ tenant: 'acme', request: 'triage this' })).toMatchObject({ status: 'refused' })
+    expect(started).toHaveLength(0)
+  }
+})
+
+it('refuses a model host with a bad provider name, key variable or URL', async () => {
+  for (const model of [
+    { provider: 'deepseek-official', model: 'm', host: HOST },
+    { provider: 'Bad Name', model: 'm', host: HOST },
+    { provider: 'eu-host', model: 'm', host: { ...HOST, apiKeyEnv: 'sk-live-not-a-name' } },
+    { provider: 'eu-host', model: 'm', host: { ...HOST, baseURL: 'file:///etc/passwd' } },
+    { provider: 'eu-host', model: 'm', host: { ...HOST, baseURL: 'https://user:secret@api.host.example/v1' } },
+  ]) {
+    const { runner, started } = setup({ model })
+    expect(await runner.runTask({ tenant: 'acme', request: 'x' })).toMatchObject({ status: 'refused' })
+    expect(started).toHaveLength(0)
+  }
+})
+
+it('without a host the patch leaves the model routes alone', async () => {
+  const { runner, started } = setup()
+  await runner.runTask({ tenant: 'acme', request: 'x' })
+  expect(started[0]!.patch).not.toContain('llm-gateways')
+})

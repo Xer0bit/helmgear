@@ -5,8 +5,8 @@ import type { ApprovalQueue, AuditLog, MemoryStore } from '@helmgear/gateway'
 import { route, type Classifier, type Judge } from '@helmgear/router'
 import { Helmgear, RequestTimeoutError, TransportClosedError, type HelmgearOptions, type RunResult } from '@helmgear/sdk-client'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
-import { templatePatch, type ToolInfo } from './patch.ts'
-import { verifyReply, type ActionFact } from './verify.ts'
+import { templatePatch, type ModelHost, type ToolInfo } from './patch.ts'
+import { actionReport, verifyReply, type ActionFact } from './verify.ts'
 
 /** The part of the harness client the runner uses. */
 export interface HarnessLike {
@@ -32,7 +32,8 @@ export interface RunnerOptions {
     describe?(connectors: string[]): ToolInfo[]
   }
   classifier: Classifier
-  model: { provider: string; model: string }
+  /** `host` points the run at a server other than DeepSeek's own API; `provider` is then a name you choose for it. */
+  model: { provider: string; model: string; host?: ModelHost }
   /**
    * The complete environment of the harness process. Default: PATH, HOME and
    * the DeepSeek key only, so no other secret of the application reaches the
@@ -60,6 +61,8 @@ export interface RunnerOptions {
 export interface Checked {
   /** This session's tool calls as the gateway recorded them, oldest first. Trust these over the reply. */
   actions: ActionFact[]
+  /** `actions` in plain lines by outcome: what was done, what waits for approval, what failed. */
+  report: string
   /** True only when a judge read the reply and found no claim the record does not support. */
   verified: boolean
   problems: string[]
@@ -90,6 +93,30 @@ const PLAN_REQUEST = 'Do not act yet and do not call any tool. Write a short pla
 const PASSED_ENV = ['PATH', 'HOME', 'TMPDIR', 'LANG', 'DEEPSEEK_API_KEY', 'DEEPSEEK_BASE_URL']
 // DeepSeek's own API stores request data in mainland China.
 const PRC_HOSTED_PROVIDERS = ['deepseek-official']
+const PRC_HOSTS = /(^|\.)deepseek\.com$/
+const PROVIDER = /^[a-z0-9][a-z0-9-]{0,63}$/
+const ENV_NAME = /^[A-Z][A-Z0-9_]{0,63}$/
+
+/** Why this model host cannot be used, or undefined when it can. */
+function hostProblem(model: RunnerOptions['model']): string | undefined {
+  if (!model.host) return undefined
+  if (!PROVIDER.test(model.provider) || PRC_HOSTED_PROVIDERS.includes(model.provider)) return 'a model host needs its own provider name in lowercase letters, digits and hyphens'
+  if (!ENV_NAME.test(model.host.apiKeyEnv)) return 'apiKeyEnv must be the name of an environment variable'
+  try {
+    const url = new URL(model.host.baseURL)
+    if (!['http:', 'https:'].includes(url.protocol)) return 'the model host URL must be http or https'
+    if (url.username || url.password) return 'the model host URL must not carry a user name or password; put the key in the environment variable'
+  } catch { return 'the model host URL is not a URL' }
+  return undefined
+}
+
+/** True when requests to this model are stored in mainland China. */
+function prcHosted(model: RunnerOptions['model']): boolean {
+  if (!model.host) return PRC_HOSTED_PROVIDERS.includes(model.provider)
+  // Naming DeepSeek's own API as a "host" does not make it another host.
+  // A fully qualified name may end in a dot; it is the same host.
+  try { return PRC_HOSTS.test(new URL(model.host.baseURL).hostname.replace(/\.+$/, '')) } catch { return true }
+}
 
 function turnError(result: RunResult): string {
   for (const event of [...result.events].reverse() as { type: string; data?: { reason?: { error?: { message?: string } } } }[]) {
@@ -97,6 +124,16 @@ function turnError(result: RunResult): string {
     if (message) return message
   }
   return 'the turn ended in an error'
+}
+
+/**
+ * The second model host named in the environment, if any: `MODEL_HOST_URL` and
+ * `MODEL_HOST_MODEL`, with the key in `MODEL_HOST_API_KEY` and an optional
+ * `MODEL_HOST_NAME`. Only the key's variable name is kept here, never its value.
+ */
+export function modelHostFromEnv(env: NodeJS.ProcessEnv = process.env): RunnerOptions['model'] | undefined {
+  if (!env.MODEL_HOST_URL || !env.MODEL_HOST_MODEL) return undefined
+  return { provider: env.MODEL_HOST_NAME || 'second-host', model: env.MODEL_HOST_MODEL, host: { baseURL: env.MODEL_HOST_URL, apiKeyEnv: 'MODEL_HOST_API_KEY' } }
 }
 
 export interface TaskInput {
@@ -141,7 +178,9 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
         if (routed.kind === 'none') return { status: 'no-template', reason: routed.detail ? `${routed.reason}: ${routed.detail}` : routed.reason }
         template = routed.template
       }
-      if (template.dataClass === 'sensitive' && PRC_HOSTED_PROVIDERS.includes(options.model.provider)) {
+      const problem = hostProblem(options.model)
+      if (problem) return { status: 'refused', reason: problem }
+      if (template.dataClass === 'sensitive' && prcHosted(options.model)) {
         return { status: 'refused', reason: `template ${template.name} handles sensitive data and may not run on provider ${options.model.provider}` }
       }
 
@@ -161,8 +200,11 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
           memory: options.memory?.render(tenant, template.name),
           tools: options.gateway.describe?.(template.connectors),
           planning,
+          model: options.model,
         }), { mode: 0o600 })
-        const base = options.env ?? Object.fromEntries(PASSED_ENV.flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+        const base = options.env ?? Object.fromEntries((options.model.host ? [...PASSED_ENV.filter(name => !name.startsWith('DEEPSEEK_')), options.model.host.apiKeyEnv] : PASSED_ENV).flatMap(name => process.env[name] === undefined ? [] : [[name, process.env[name]]]))
+        // A hosted model is declared without thinking levels (see templatePatch), so no level is asked for.
+        const hosted = options.model.host !== undefined
         const start = (effort: ReasoningEffort): HarnessLike => factory({
           profile: 'agent',
           patches: [patchFile],
@@ -170,7 +212,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
           cwd: join(home, 'work'),
           provider: options.model.provider,
           model: options.model.model,
-          reasoningEffort: effort as NonNullable<HelmgearOptions['reasoningEffort']>,
+          ...(hosted ? {} : { reasoningEffort: effort as NonNullable<HelmgearOptions['reasoningEffort']> }),
           env: { ...base, HELMGEAR_GATEWAY_TOKEN: token },
         })
         harness = start(reasoningEffort ?? template.reasoningEffort)
@@ -200,7 +242,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
         }
         let result = count(await turn(planning ? PLAN_REQUEST + request : request))
         if (result.finishReason === 'error') {
-          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), verified: false, problems: [], usage }
+          return { status: 'failed', template: template.name, sessionId, reason: turnError(result), pendingActionIds: pendingActionIds(), actions: actions(), report: actionReport(actions()), verified: false, problems: [], usage }
         }
         if (planning) return { status: 'plan', template: template.name, sessionId, plan: result.finalResponse, usage }
         let check = options.judge
@@ -217,7 +259,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
           // The repair is the step that matters, so it gets more thinking: a new process with a higher
           // reasoning effort resumes the same session. One session, one process at a time.
           const escalate = options.escalate ?? { reasoningEffort: 'high' as const }
-          if (escalate && harness.resume) {
+          if (escalate && harness.resume && !hosted) {
             await harness.close().catch(() => {})
             harness = start(escalate.reasoningEffort)
             await harness.resume!(sessionId)
@@ -230,7 +272,7 @@ export function createRunner(options: RunnerOptions): { runTask(input: TaskInput
         }
         return {
           status: 'done', template: template.name, sessionId, response: result.finalResponse, pendingActionIds: pendingActionIds(),
-          actions: actions(), verified: check.verified, problems: check.problems, usage,
+          actions: actions(), report: actionReport(actions()), verified: check.verified, problems: check.problems, usage,
         }
       } catch (error) {
         if (error instanceof TransportClosedError) throw new RunnerError('HARNESS_EXITED', error.message)

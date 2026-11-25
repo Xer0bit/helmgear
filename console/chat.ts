@@ -6,19 +6,23 @@
 // the gateway records it, the reply, and whether the reply matches that record.
 // Anything that would leave the machine is held until you /approve it.
 // "Send" writes a file under tmp/console/outbox; nothing really goes out.
-import { existsSync, readFileSync } from 'node:fs'
-import { basename, extname } from 'node:path'
+import { existsSync } from 'node:fs'
+import { basename } from 'node:path'
 import { createInterface } from 'node:readline'
 import { createCore, MemoryStore, startGateway, type PendingAction } from '@helmgear/gateway'
 import { jevClassifier, jevJudge, route, type Classifier } from '@helmgear/router'
-import { createRunner, type TaskResult } from '@helmgear/runner'
+import { createRunner, modelHostFromEnv, type RunnerOptions, type TaskResult } from '@helmgear/runner'
 import { loadTemplates, type ReasoningEffort } from '@helmgear/template'
-import { KnowledgeBase, teiEmbedder } from '@helmgear/knowledge'
+import { EXTRACTABLE, extractText, KnowledgeBase, teiEmbedder, teiReranker } from '@helmgear/knowledge'
 import { connect } from './connectors.ts'
 
 const TENANT = 'console'
 const stateDir = 'tmp/console'
-const MODELS = ['deepseek-flash', 'deepseek-v4-pro']
+// A second model host (any OpenAI-compatible server) becomes one more choice under /model.
+const secondHost = modelHostFromEnv()
+const hostModel = secondHost?.model
+const MODELS = ['deepseek-flash', 'deepseek-v4-pro', ...(hostModel ? [hostModel] : [])]
+const modelFor = (name: string): RunnerOptions['model'] => secondHost && name === hostModel ? secondHost : { provider: 'deepseek-official', model: name }
 const EFFORTS: ReasoningEffort[] = ['off', 'low', 'high', 'max']
 const firecrawlUrl = (process.env.FIRECRAWL_URL ?? 'http://127.0.0.1:3002').replace(/\/+$/, '')
 
@@ -65,7 +69,7 @@ function step(mark: string, text: string): void {
 
 // ---- the system under test
 const memory = new MemoryStore(`${stateDir}/memory`)
-const kb = new KnowledgeBase({ dir: `${stateDir}/kb`, ...(process.env.HELMGEAR_EMBEDDINGS_URL ? { embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) } : {}) })
+const kb = new KnowledgeBase({ dir: `${stateDir}/kb`, ...(process.env.HELMGEAR_EMBEDDINGS_URL ? { embedder: teiEmbedder({ url: process.env.HELMGEAR_EMBEDDINGS_URL, ...(process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX ? { queryPrefix: process.env.HELMGEAR_EMBEDDINGS_QUERY_PREFIX } : {}) }) } : {}), ...(process.env.HELMGEAR_RERANKER_URL ? { reranker: teiReranker({ url: process.env.HELMGEAR_RERANKER_URL }) } : {}) })
 const connected = await connect(stateDir, memory, kb)
 const connectors = connected.connectors
 const core = createCore({ connectors, stateDir, memory })
@@ -94,6 +98,8 @@ function showWaiting(only?: string[]): void {
   for (const action of shown) {
     const n = list.indexOf(action) + 1
     say(`\n${yellow(`■ Held for you [${n}]`)} ${bold(action.tool)} ${dim(`from ${action.ctx.template}`)}`)
+    // The agent had read outside content before asking: a page or document could have put the idea there.
+    if (action.untrustedSources?.length) say(`    ${yellow('!')} ${yellow(`The agent read outside content first (${action.untrustedSources.join(', ')}).`)} ${dim('Check this is what you asked for, not what a page asked for.')}`)
     for (const [key, value] of Object.entries(action.input)) {
       const text = typeof value === 'string' ? value : JSON.stringify(value)
       say(`    ${dim(`${key}:`.padEnd(9))}${text.split('\n').join(`\n    ${' '.repeat(9)}`)}`)
@@ -146,7 +152,7 @@ async function runTask(request: string, approved = false): Promise<void> {
   const runner = createRunner({
     templatesDir: 'templates', stateDir,
     gateway: { ...gateway, approvals: core.approvals, audit: core.audit },
-    classifier, model: { provider: 'deepseek-official', model: settings.model }, memory,
+    classifier, model: modelFor(settings.model), memory,
     ...(judge ? { judge } : {}),
   })
   let seen = continuing ? core.audit.read().filter(entry => entry.sessionId === continuing).length : 0
@@ -205,7 +211,9 @@ ${render(result.response || '(empty reply)')}
     if (result.verified) say(`${green('✓ Checked')} ${dim('the reply claims nothing the record does not show.')}`)
     else if (result.problems.some(problem => problem.startsWith('not verified'))) say(`${yellow('? Not checked')} ${dim('no Jev key, so the reply was not compared with the record.')}`)
     else say(`${red('✗ The reply does not match what the agent did:')}\n${result.problems.map(problem => `    ${problem}`).join('\n')}`)
-    say(dim(`  ${result.template}, ${seconds} s, ${count(result.usage)} tokens`))
+    // Written from the gateway's record, not from the reply.
+    say(dim(result.report.split('\n').map(line => `  ${line}`).join('\n')))
+    say(dim(`  ${result.template}, ${seconds} s, ${count(result.usage)} tokens${result.usage.cachedInputTokens ? ` (${Math.round(100 * result.usage.cachedInputTokens / (result.usage.inputTokens + result.usage.cachedInputTokens))}% of input from cache)` : ''}`))
     showWaiting(result.pendingActionIds)
   } else {
     pendingPlan = undefined
@@ -235,8 +243,8 @@ const HELP = `
   ${bold('/pending')}                actions held for your approval
   ${bold('/approve')} <n|all>        let a held action go ahead
   ${bold('/reject')} <n> [reason]    stop it; the reason becomes a lesson for that agent
-  ${bold('/memory')}                 what the agents know about the business
-  ${bold('/remember')} <fact>        add a fact      ${bold('/forget')} <n>   remove one
+  ${bold('/memory')}                 what the agents know about the business; /memory edit <n> <new text> corrects one
+  ${bold('/remember')} <fact>        add a fact (end with --days 30 to make it expire)      ${bold('/forget')} <n>   remove one
   ${bold('/kb')}                     the knowledge base: /kb add <file or URL> [title], /kb list, /kb remove <n>, /kb search <question>
   ${bold('/record')}                 the gateway's latest decisions
   ${bold('/status')}                 connections and current settings
@@ -271,7 +279,7 @@ async function command(line: string): Promise<boolean> {
     case 'agent':
       if (!argument) {
         say(`  ${settings.agent === 'auto' ? green('●') : ' '} ${bold('auto')} ${dim('Jev picks, or says none fits')}`)
-        for (const t of templates) say(`  ${settings.agent === t.name ? green('●') : ' '} ${bold(t.name)} ${dim(`${t.description} [${t.connectors.join(', ') || 'no tools'}]${t.dataClass === 'sensitive' ? ' sensitive: will refuse on this model host' : ''}`)}`)
+        for (const t of templates) say(`  ${settings.agent === t.name ? green('●') : ' '} ${bold(t.name)} ${dim(`${t.description} [${t.connectors.join(', ') || 'no tools'}]${t.dataClass === 'sensitive' ? (hostModel ? ` sensitive: runs only on ${hostModel}, pick it with /model` : ' sensitive: needs a second model host, see MODEL_HOST_URL in .env.example') : ''}`)}`)
       } else if (argument === 'auto' || templates.some(t => t.name === argument)) { settings.agent = argument; say(dim(`  Requests go to: ${argument}`)) }
       else say(red(`  No agent called "${argument}". /agent lists them.`))
       break
@@ -301,12 +309,24 @@ async function command(line: string): Promise<boolean> {
       break
     }
     case 'memory': {
+      if (rest[0] === 'edit') {
+        const entry = memory.list(TENANT)[Number(rest[1]) - 1]
+        if (!entry) throw new Error(`There is no memory entry "${rest[1] ?? ''}". /memory lists them.`)
+        memory.update(TENANT, entry.id, rest.slice(2).join(' '))
+        say(dim('  Corrected.'))
+        break
+      }
       const entries = memory.list(TENANT)
       if (entries.length === 0) say(dim('  Nothing yet. /remember <fact> adds one; rejecting with a reason adds a lesson.'))
-      entries.forEach((entry, i) => { say(`  [${i + 1}] ${entry.text} ${dim(`(${entry.kind}${entry.template ? `, ${entry.template} only` : ''})`)}`) })
+      entries.forEach((entry, i) => { say(`  [${i + 1}] ${entry.text} ${dim(`(${entry.kind}${entry.template ? `, ${entry.template} only` : ''}${entry.expiresAt ? `, until ${entry.expiresAt.slice(0, 10)}` : ''})`)}`) })
       break
     }
-    case 'remember': memory.add(TENANT, { kind: 'fact', source: 'person', text: argument }); say(dim('  Remembered. Every agent reads it before its next task.')); break
+    case 'remember': {
+      const days = /\s--days\s+(\d+)$/.exec(argument)
+      memory.add(TENANT, { kind: 'fact', source: 'person', text: days ? argument.slice(0, days.index) : argument, ...(days ? { expiresAt: new Date(Date.now() + Number(days[1]) * 86_400_000).toISOString() } : {}) })
+      say(dim(`  Remembered${days ? ` for ${days[1]} days` : ''}. Every agent reads it before its next task.`))
+      break
+    }
     case 'forget': {
       const entry = memory.list(TENANT)[Number(argument) - 1]
       if (!entry) throw new Error(`There is no memory entry "${argument}". /memory lists them.`)
@@ -327,9 +347,8 @@ async function command(line: string): Promise<boolean> {
           text = page.data.markdown
         } else {
           if (!existsSync(target)) throw new Error(`No file at ${target}`)
-          if (!['.md', '.markdown', '.txt', '.csv', '.json', '.html', '.htm'].includes(extname(target).toLowerCase())) throw new Error('Only text files can be added for now: .md, .txt, .csv, .json, .html. Convert a PDF or Word file to text first.')
-          text = readFileSync(target, 'utf8')
-          if (/\.html?$/i.test(target)) text = text.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' ')
+          text = await extractText(target)
+          if (!text.trim()) throw new Error(`No text found in ${target}. A scanned PDF has no text to read. Supported: ${EXTRACTABLE.join(', ')}`)
         }
         const document = await kb.add(TENANT, { title: titleWords.join(' ') || basename(target).replace(/\.[^.]+$/, ''), source: target, text })
         say(`${green('✓')} Added ${bold(document.title)} ${dim(`${document.chars.toLocaleString()} characters in ${document.chunks} passages. Agents can search it now.`)}`)
