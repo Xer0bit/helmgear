@@ -56,6 +56,21 @@ it('refuses input that violates the schema and never calls run', async () => {
   expect(audit.read()).toMatchObject([{ event: 'refused', tool: 'fake.read' }])
 })
 
+it('says how long a string is when it breaks a length limit, so the agent knows how much to cut', async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), 'helmgear-exec-'))
+  const audit = new AuditLog(join(stateDir, 'audit.jsonl'))
+  const inputSchema = { type: 'object', properties: { text: { type: 'string', minLength: 3, maxLength: 10 } }, required: ['text'] }
+  const connectors: Connector[] = [{ name: 'x', tools: [{ name: 'x.post', description: 'post', inputSchema, tier: 'send', run: async () => ({}) }] }]
+  const executor = new Executor({ connectors, audit, stateDir, queue: { enqueue: () => {} } })
+  // Code points, as the schema counts them: the emoji is one character, not two.
+  expect(await executor.call('x.post', { text: '😀bcdefghijkl' }, CTX, 'k1')).toEqual({
+    status: 'refused', reason: 'invalid input: /text must NOT have more than 10 characters (it has 12, 2 over)',
+  })
+  expect(await executor.call('x.post', { text: 'ab' }, CTX, 'k2')).toEqual({
+    status: 'refused', reason: 'invalid input: /text must NOT have fewer than 3 characters (it has 2)',
+  })
+})
+
 it('refuses an unknown tool', async () => {
   const { executor, audit } = setup()
   expect(await executor.call('fake.nope', {}, CTX, 'k1')).toEqual({ status: 'refused', reason: 'unknown tool: fake.nope' })

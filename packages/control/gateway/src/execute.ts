@@ -1,12 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { Ajv, type ValidateFunction } from 'ajv'
+import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv'
 import { type AuditLog, payloadSha256 } from './audit.ts'
 import type { CallContext, CallResult, Connector, PendingRequest, ToolDef } from './registry.ts'
 
 const SAFE_KEY = /^[A-Za-z0-9_-]{1,128}$/
 // One dot exactly, so `<connector>.<action>` maps to the MCP name `<connector>__<action>` and back without ambiguity.
 const TOOL_NAME = /^[a-z0-9-]+\.[a-z0-9_-]+$/
+
+/**
+ * One schema error as the agent reads it. A length error also states the measured
+ * length, so a model that cannot count characters knows how much to change.
+ */
+function describeError(e: ErrorObject): string {
+  const base = `${e.instancePath || '/'} ${e.message}`
+  if ((e.keyword !== 'maxLength' && e.keyword !== 'minLength') || typeof e.data !== 'string') return base
+  // Code points, as the schema counts them.
+  const length = [...e.data].length
+  const over = e.keyword === 'maxLength' ? `, ${length - (e.params as { limit: number }).limit} over` : ''
+  return `${base} (it has ${length}${over})`
+}
 
 export interface ExecutorOptions {
   connectors: Connector[]
@@ -23,7 +36,8 @@ export class Executor {
   private readonly resultsDir: string
 
   constructor(private readonly options: ExecutorOptions) {
-    const ajv = new Ajv({ allErrors: true, strict: false })
+    // verbose: errors carry the rejected value, for the length in describeError.
+    const ajv = new Ajv({ allErrors: true, strict: false, verbose: true })
     for (const connector of options.connectors) {
       for (const def of connector.tools) {
         if (!TOOL_NAME.test(def.name) || !def.name.startsWith(`${connector.name}.`)) {
@@ -74,7 +88,7 @@ export class Executor {
     // A grant names whole connectors (`outbox`) or single tools (`outbox.draft`).
     if (ctx.connectors && !ctx.connectors.includes(tool.split('.')[0]!) && !ctx.connectors.includes(tool)) return refuse(`tool not available to this template: ${tool}`)
     if (!entry.validate(input)) {
-      return refuse(`invalid input: ${(entry.validate.errors ?? []).map(e => `${e.instancePath || '/'} ${e.message}`).join('; ')}`)
+      return refuse(`invalid input: ${(entry.validate.errors ?? []).map(describeError).join('; ')}`)
     }
 
     let result: CallResult
